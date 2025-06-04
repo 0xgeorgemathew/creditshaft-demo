@@ -2,9 +2,8 @@
 "use client";
 
 import { useState } from "react";
-import { stripePromise, mockPreAuthData } from "@/lib/stripe";
 import { PreAuthData } from "@/types";
-import { CreditCard, CheckCircle, AlertCircle } from "lucide-react";
+import { CreditCard, AlertCircle } from "lucide-react";
 
 interface StripePreAuthProps {
   walletAddress: string;
@@ -27,20 +26,35 @@ export default function StripePreAuth({
     setError("");
 
     try {
-      // Simulate Stripe pre-authorization process
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Call API endpoint instead of mock data
+      const response = await fetch("/api/stripe/preauth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          cardNumber,
+          expiryDate,
+          cvc,
+          walletAddress,
+        }),
+      });
 
-      // Mock successful pre-auth based on test card
-      const mockKey = cardNumber.includes("4242")
-        ? "test_card_4242"
-        : "test_card_4000";
-      const preAuthData = {
-        ...mockPreAuthData[mockKey],
-        wallet_address: walletAddress,
-        created_at: new Date().toISOString(),
-      };
+      const data = await response.json();
 
-      onPreAuthSuccess(preAuthData);
+      if (data.success) {
+        const preAuthData: PreAuthData = {
+          available_credit: data.availableCredit,
+          card_last_four: data.cardLastFour,
+          card_brand: data.cardBrand,
+          status: data.status,
+          wallet_address: walletAddress,
+          created_at: new Date().toISOString(),
+        };
+        onPreAuthSuccess(preAuthData);
+      } else {
+        setError(data.error || "Pre-authorization failed. Please try again.");
+      }
     } catch (err) {
       setError("Pre-authorization failed. Please try again.");
     } finally {

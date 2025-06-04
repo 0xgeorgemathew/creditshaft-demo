@@ -29,14 +29,31 @@ export default function BorrowingInterface({
   const handleBorrow = async () => {
     setIsProcessing(true);
 
-    // Simulate blockchain transaction
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    try {
+      const response = await fetch("/api/borrow", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: parseFloat(borrowAmount),
+          asset: selectedAsset,
+          walletAddress,
+          preAuthId: "mock_id", // In real app, this would come from preAuthData
+        }),
+      });
 
-    // Mock transaction hash
-    const mockTxHash = "0x" + Math.random().toString(16).substr(2, 64);
-    setTxHash(mockTxHash);
-    setBorrowSuccess(true);
-    setIsProcessing(false);
+      const data = await response.json();
+
+      if (data.success) {
+        setTxHash(data.txHash);
+        setBorrowSuccess(true);
+      }
+    } catch (error) {
+      console.error("Borrowing failed:", error);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const copyTxHash = () => {
