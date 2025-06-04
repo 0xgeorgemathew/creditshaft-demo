@@ -17,9 +17,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
-        <Providers>{children}</Providers>
+    <html lang="en" className="h-full">
+      <body className={`${inter.className} h-full bg-dark-gradient`}>
+        <Providers>
+          <div className="min-h-screen bg-dark-gradient">{children}</div>
+        </Providers>
       </body>
     </html>
   );

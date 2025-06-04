@@ -1,7 +1,8 @@
 "use client";
 
-import { useAccount, useDisconnect } from "wagmi";
+import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { useEffect, useState } from "react";
+import { Wallet, ExternalLink, Zap } from "lucide-react";
 
 interface WalletConnectionProps {
   onWalletConnected: (address: string) => void;
@@ -10,7 +11,8 @@ interface WalletConnectionProps {
 export default function WalletConnection({
   onWalletConnected,
 }: WalletConnectionProps) {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, isConnecting } = useAccount();
+  const { connect, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
   const [hasMounted, setHasMounted] = useState(false);
 
@@ -24,15 +26,9 @@ export default function WalletConnection({
     }
   }, [isConnected, address, onWalletConnected]);
 
-  // Mock wallet connection for demo
-  const handleMockConnection = () => {
-    const mockAddress = "0x59d4C5BE20B41139494F494e41139494e1139494";
-    onWalletConnected(mockAddress);
-  };
-
   if (!hasMounted) {
     return (
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 rounded-xl shadow-lg">
+      <div className="glassmorphism rounded-xl shadow-2xl p-8 border border-white/20">
         <div className="animate-pulse">
           <div className="h-8 bg-white/20 rounded mb-4"></div>
           <div className="h-16 bg-white/10 rounded"></div>
@@ -42,43 +38,109 @@ export default function WalletConnection({
   }
 
   return (
-    <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 rounded-xl shadow-lg">
-      <h2 className="text-2xl font-bold text-white mb-4">
-        Connect Your Wallet
-      </h2>
+    <div className="glassmorphism rounded-xl shadow-2xl p-8 border border-white/20 card-hover">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+          <Wallet className="text-white" size={20} />
+        </div>
+        <h2 className="text-2xl font-bold gradient-text">
+          Connect Your Wallet
+        </h2>
+      </div>
 
       {!isConnected ? (
-        <div className="space-y-4">
-          <p className="text-blue-100">
+        <div className="space-y-6">
+          <p className="text-gray-300 text-lg">
             Connect your wallet to start using your credit as DeFi collateral
           </p>
 
-          <div className="space-y-3">
-            <div className="bg-yellow-500/20 border border-yellow-500/40 rounded-lg p-3">
-              <p className="text-yellow-200 text-sm">
-                🎯 Demo Mode: Using mock wallet connection for hackathon demo
-              </p>
-            </div>
-            <button
-              onClick={handleMockConnection}
-              className="w-full bg-white/20 hover:bg-white/30 text-white py-3 px-4 rounded-lg font-semibold transition-all transform hover:scale-105"
-            >
-              Connect Demo Wallet
-            </button>
+          <div className="space-y-4">
+            {connectors.map((connector) => (
+              <button
+                key={connector.id}
+                onClick={() => connect({ connector })}
+                disabled={isPending || isConnecting}
+                className="w-full glassmorphism hover:bg-white/10 text-white py-4 px-6 rounded-xl font-semibold transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between border border-white/10 shadow-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-400 rounded-lg flex items-center justify-center">
+                    <Zap size={16} />
+                  </div>
+                  <span className="text-lg">{connector.name}</span>
+                </div>
+                {(isPending || isConnecting) && (
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                )}
+              </button>
+            ))}
+
+            {connectors.length === 0 && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-6 backdrop-blur">
+                <p className="text-yellow-200 text-sm mb-4 font-medium">
+                  No wallet connectors found. Make sure you have a Web3 wallet
+                  installed.
+                </p>
+                <div className="space-y-3">
+                  <a
+                    href="https://metamask.io/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-yellow-100 hover:text-white text-sm flex items-center gap-2 transition-colors p-2 rounded-lg hover:bg-yellow-500/10"
+                  >
+                    <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+                      <span className="text-xs font-bold">M</span>
+                    </div>
+                    Install MetaMask <ExternalLink size={14} />
+                  </a>
+                  <a
+                    href="https://www.coinbase.com/wallet"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-yellow-100 hover:text-white text-sm flex items-center gap-2 transition-colors p-2 rounded-lg hover:bg-yellow-500/10"
+                  >
+                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                      <span className="text-xs font-bold">C</span>
+                    </div>
+                    Install Coinbase Wallet <ExternalLink size={14} />
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
-          <div className="bg-white/10 backdrop-blur rounded-lg p-4">
-            <p className="text-sm text-blue-100 mb-1">Connected Wallet:</p>
-            <p className="text-white font-mono text-sm break-all">{address}</p>
+        <div className="space-y-6">
+          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-6 backdrop-blur success-bounce">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-green-200 text-lg font-semibold">
+                Wallet Connected
+              </span>
+            </div>
+            <div className="glassmorphism rounded-lg p-4 border border-white/10">
+              <p className="text-sm text-gray-300 mb-2">Connected Address:</p>
+              <p className="text-white font-mono text-sm break-all bg-black/20 p-3 rounded-lg border border-white/10">
+                {address}
+              </p>
+            </div>
           </div>
-          <button
-            onClick={() => disconnect()}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            Disconnect
-          </button>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => disconnect()}
+              className="bg-red-500/20 hover:bg-red-500/30 text-red-200 hover:text-white px-6 py-3 rounded-xl transition-all border border-red-500/40 font-medium backdrop-blur"
+            >
+              Disconnect
+            </button>
+            <a
+              href={`https://sepolia.etherscan.io/address/${address}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="glassmorphism hover:bg-white/10 text-white px-6 py-3 rounded-xl transition-all flex items-center gap-2 border border-white/10 font-medium"
+            >
+              View on Etherscan <ExternalLink size={16} />
+            </a>
+          </div>
         </div>
       )}
     </div>
