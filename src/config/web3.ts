@@ -1,37 +1,16 @@
-import { createAppKit } from "@reown/appkit/react";
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
 import { sepolia } from "viem/chains";
 
 // 1. Get a project ID at https://cloud.reown.com
-const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID!;
+const projectId =
+  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID ||
+  "11a474a6be2638cdf851d49bf0446dc1";
 
-// 2. Create a metadata object - optional
-const metadata = {
-  name: "CreditBridge",
-  description: "Turn your credit card into DeFi collateral",
-  url: "https://creditbridge.demo",
-  icons: ["https://avatars.githubusercontent.com/u/179229932"],
-};
-
-// 3. Set the networks
-const networks = [sepolia];
-
-// 4. Create Wagmi Adapter
+// 2. Create Wagmi Adapter
 const wagmiAdapter = new WagmiAdapter({
-  networks,
+  networks: [sepolia],
   projectId,
   ssr: true,
-});
-
-// 5. Create AppKit instance
-createAppKit({
-  adapters: [wagmiAdapter],
-  networks,
-  projectId,
-  metadata,
-  features: {
-    analytics: true,
-  },
 });
 
 export { wagmiAdapter };

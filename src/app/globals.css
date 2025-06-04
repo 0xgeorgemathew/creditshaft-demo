@@ -8,7 +8,9 @@
   }
 
   body {
-    @apply bg-slate-900 text-white;
+    @apply text-white;
+    background: linear-gradient(135deg, #0f172a 0%, #581c87 50%, #0f172a 100%);
+    min-height: 100vh;
   }
 }
 
@@ -22,7 +24,9 @@
   }
 
   .glassmorphism {
-    @apply bg-white/5 backdrop-blur-sm border border-white/10;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 }
 
