@@ -1,102 +1,152 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import WalletConnection from "@/components/WalletConnection";
+import StripePreAuth from "@/components/StripePreAuth";
+import PreAuthStatus from "@/components/PreAuthStatus";
+import BorrowingInterface from "@/components/BorrowingInterface";
+import { PreAuthData } from "@/types";
+import { Zap, Shield, TrendingUp } from "lucide-react";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [walletAddress, setWalletAddress] = useState<string>("");
+  const [preAuthData, setPreAuthData] = useState<PreAuthData | null>(null);
+  const [showBorrowing, setShowBorrowing] = useState(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const handleWalletConnected = (address: string) => {
+    setWalletAddress(address);
+  };
+
+  const handlePreAuthSuccess = (data: PreAuthData) => {
+    setPreAuthData(data);
+  };
+
+  const handleBorrow = () => {
+    setShowBorrowing(true);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      {/* Header */}
+      <header className="border-b border-white/10 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+                <Zap className="text-white" size={20} />
+              </div>
+              <h1 className="text-2xl font-bold text-white">CreditBridge</h1>
+            </div>
+            <div className="text-sm text-gray-300">
+              Hackathon Demo • Sepolia Testnet
+            </div>
+          </div>
         </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Hero Section */}
+        {!walletAddress && (
+          <div className="text-center mb-12">
+            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6">
+              Turn Your Credit Card Into
+              <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                {" "}
+                DeFi Collateral
+              </span>
+            </h2>
+            <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
+              Borrow crypto instantly using your credit card as collateral. No
+              KYC, no identity verification, completely permissionless.
+            </p>
+
+            <div className="grid md:grid-cols-3 gap-6 mb-12">
+              <div className="bg-white/5 backdrop-blur rounded-xl p-6 border border-white/10">
+                <Zap className="text-blue-400 mb-4 mx-auto" size={32} />
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Instant Borrowing
+                </h3>
+                <p className="text-gray-400 text-sm">
+                  Get crypto loans in seconds using credit card pre-auth
+                </p>
+              </div>
+              <div className="bg-white/5 backdrop-blur rounded-xl p-6 border border-white/10">
+                <Shield className="text-green-400 mb-4 mx-auto" size={32} />
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  No KYC Required
+                </h3>
+                <p className="text-gray-400 text-sm">
+                  Completely anonymous, only wallet connection needed
+                </p>
+              </div>
+              <div className="bg-white/5 backdrop-blur rounded-xl p-6 border border-white/10">
+                <TrendingUp
+                  className="text-purple-400 mb-4 mx-auto"
+                  size={32}
+                />
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  80% LTV Ratio
+                </h3>
+                <p className="text-gray-400 text-sm">
+                  Borrow up to 80% of your credit card limit
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Main Flow */}
+        <div className="space-y-8">
+          {/* Step 1: Wallet Connection */}
+          {!walletAddress && (
+            <WalletConnection onWalletConnected={handleWalletConnected} />
+          )}
+
+          {/* Step 2: Credit Card Pre-Auth */}
+          {walletAddress && !preAuthData && (
+            <StripePreAuth
+              walletAddress={walletAddress}
+              onPreAuthSuccess={handlePreAuthSuccess}
+            />
+          )}
+
+          {/* Step 3: Pre-Auth Status */}
+          {preAuthData && !showBorrowing && (
+            <PreAuthStatus preAuthData={preAuthData} onBorrow={handleBorrow} />
+          )}
+
+          {/* Step 4: Borrowing Interface */}
+          {showBorrowing && preAuthData && (
+            <BorrowingInterface
+              preAuthData={preAuthData}
+              walletAddress={walletAddress}
+            />
+          )}
+        </div>
+
+        {/* Demo Info */}
+        {walletAddress && (
+          <div className="mt-12 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-6">
+            <h3 className="text-yellow-400 font-semibold mb-2">
+              🎯 Hackathon Demo Mode
+            </h3>
+            <p className="text-yellow-200 text-sm">
+              This is a demonstration for hackathon purposes. No real money or
+              credit cards are being used. All transactions are on Sepolia
+              testnet.
+            </p>
+          </div>
+        )}
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+      {/* Footer */}
+      <footer className="border-t border-white/10 mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center text-gray-400">
+            <p className="mb-2">Built by The Collateral Cartel</p>
+            <p className="text-sm">Bridging Web2 Credit with Web3 DeFi</p>
+          </div>
+        </div>
       </footer>
     </div>
   );
