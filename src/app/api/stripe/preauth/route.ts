@@ -234,7 +234,7 @@ export async function POST(request: NextRequest) {
     const customer = await stripe.customers.create({
       metadata: {
         wallet_address: walletAddress,
-        created_via: "creditbridge_api",
+        created_via: "creditshaft_api",
         request_id: requestId,
       },
     });

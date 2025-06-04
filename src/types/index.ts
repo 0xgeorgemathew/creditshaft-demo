@@ -1,4 +1,5 @@
 export interface PreAuthData {
+  [x: string]: string | number | undefined;
   available_credit: number;
   card_last_four: string;
   card_brand: string;

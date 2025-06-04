@@ -52,7 +52,7 @@ export default function Home() {
                 <Zap className="text-white" size={24} />
               </div>
               <h1 className="text-3xl font-bold text-white">
-                <span className="gradient-text">Credit</span>Bridge
+                <span className="gradient-text">Credit</span>Shaft
               </h1>
             </div>
             <div className="text-sm text-gray-300 bg-white/10 px-3 py-1 rounded-full backdrop-blur">
@@ -229,7 +229,7 @@ export default function Home() {
             <div className="flex items-center justify-center gap-2 mb-4">
               <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg"></div>
               <span className="text-gray-300 font-semibold">
-                Built by The Collateral Cartel
+                Built by Third Leg Ventures
               </span>
             </div>
             <p className="text-gray-400">Bridging Web2 Credit with Web3 DeFi</p>
