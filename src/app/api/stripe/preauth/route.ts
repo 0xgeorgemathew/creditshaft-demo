@@ -34,7 +34,7 @@ try {
 }
 
 export async function POST(request: NextRequest) {
-  const requestId = Math.random().toString(36).substr(2, 9);
+  const requestId = Math.random().toString(36).substring(2, 11);
   logStripe("REQUEST_START", {
     requestId,
     timestamp: new Date().toISOString(),
@@ -68,15 +68,16 @@ export async function POST(request: NextRequest) {
       if (cardIdentifier?.includes("4242") || cardIdentifier?.includes("pm_")) {
         mockResponse = {
           success: true,
-          preAuthId: "seti_" + Math.random().toString(36).substr(2, 9),
+          preAuthId: "seti_" + Math.random().toString(36).substring(2, 11),
           availableCredit: 12000,
           cardLastFour: "4242",
           cardBrand: "visa",
           walletAddress,
           status: "active",
+          customerId: "cus_mock_" + Math.random().toString(36).substring(2, 11),
           paymentMethodId:
             paymentMethodId ||
-            "pm_mock_" + Math.random().toString(36).substr(2, 9),
+            "pm_mock_" + Math.random().toString(36).substring(2, 11),
         };
         logStripe("DEMO_RESPONSE", {
           requestId,
@@ -86,15 +87,16 @@ export async function POST(request: NextRequest) {
       } else if (cardIdentifier?.includes("0002")) {
         mockResponse = {
           success: true,
-          preAuthId: "seti_" + Math.random().toString(36).substr(2, 9),
+          preAuthId: "seti_" + Math.random().toString(36).substring(2, 11),
           availableCredit: 8500,
           cardLastFour: "0002",
           cardBrand: "visa",
           walletAddress,
           status: "active",
+          customerId: "cus_mock_" + Math.random().toString(36).substring(2, 11),
           paymentMethodId:
             paymentMethodId ||
-            "pm_mock_" + Math.random().toString(36).substr(2, 9),
+            "pm_mock_" + Math.random().toString(36).substring(2, 11),
         };
         logStripe("DEMO_RESPONSE", {
           requestId,
@@ -362,7 +364,7 @@ export async function POST(request: NextRequest) {
 
 // Health check endpoint with enhanced logging
 export async function GET() {
-  const requestId = Math.random().toString(36).substr(2, 9);
+  const requestId = Math.random().toString(36).substring(2, 11);
   logStripe("HEALTH_CHECK_START", { requestId });
 
   try {

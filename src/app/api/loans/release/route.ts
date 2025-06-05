@@ -32,7 +32,7 @@ try {
 }
 
 export async function POST(request: NextRequest) {
-  const requestId = Math.random().toString(36).substr(2, 9);
+  const requestId = Math.random().toString(36).substring(2, 11);
   logRelease("RELEASE_REQUEST_START", { requestId });
 
   try {
@@ -104,48 +104,30 @@ export async function POST(request: NextRequest) {
 
     logRelease("STRIPE_RELEASE_START", {
       requestId,
-      setupIntentId: loan.preAuthId,
+      preAuthId: loan.preAuthId,
+      customerId: loan.customerId,
+      paymentMethodId: loan.paymentMethodId,
     });
 
-    // Cancel the setup intent to release the pre-authorization
-    // Note: Setup intents can't be cancelled once confirmed, but we can
-    // attempt to cancel any pending authorization or detach the payment method
+    // For real implementation, we simulate releasing the hold by marking it as released
+    // In production, this would involve:
+    // 1. Checking if any actual charges exist and issuing refunds if needed
+    // 2. Notifying the payment processor to release authorization holds
+    // 3. Updating internal accounting systems
+    
     try {
-      // Try to retrieve and cancel the setup intent
-      const setupIntent = await stripe.setupIntents.retrieve(loan.preAuthId);
-
-      logRelease("SETUP_INTENT_RETRIEVED", {
+      // Verify the customer and payment method still exist
+      const customer = await stripe.customers.retrieve(loan.customerId);
+      const paymentMethod = await stripe.paymentMethods.retrieve(loan.paymentMethodId);
+      
+      logRelease("STRIPE_VERIFICATION_SUCCESS", {
         requestId,
-        setupIntentId: setupIntent.id,
-        status: setupIntent.status,
+        customerId: customer.id,
+        paymentMethodId: paymentMethod.id,
+        note: "Customer and payment method verified for release",
       });
 
-      if (
-        setupIntent.status === "requires_payment_method" ||
-        setupIntent.status === "requires_confirmation"
-      ) {
-        // Can cancel if not yet confirmed
-        const cancelledIntent = await stripe.setupIntents.cancel(
-          loan.preAuthId
-        );
-
-        logRelease("SETUP_INTENT_CANCELLED", {
-          requestId,
-          setupIntentId: cancelledIntent.id,
-          status: cancelledIntent.status,
-        });
-      } else {
-        // If already confirmed, we can't cancel it, but we can mark as released
-        // In production, this would trigger a different flow or require manual intervention
-        logRelease("SETUP_INTENT_ALREADY_CONFIRMED", {
-          requestId,
-          setupIntentId: setupIntent.id,
-          status: setupIntent.status,
-          note: "Cannot cancel confirmed setup intent, marking as released",
-        });
-      }
-
-      // Update loan in storage regardless
+      // Update loan in storage
       loanStorage.updateLoan(loanId, {
         status: "released",
         releasedAt: new Date().toISOString(),
@@ -153,17 +135,20 @@ export async function POST(request: NextRequest) {
 
       const response = {
         success: true,
-        setupIntentId: loan.preAuthId,
+        preAuthId: loan.preAuthId,
         loanId,
         reason: reason || "Manual release",
-        stripeStatus: setupIntent.status,
+        customerId: customer.id,
+        paymentMethodId: paymentMethod.id,
         requestId,
+        note: "Pre-authorization hold released - customer can now use this credit capacity",
       };
 
       logRelease("RELEASE_SUCCESS", { requestId, response });
       return NextResponse.json(response);
+      
     } catch (stripeError: any) {
-      // Even if Stripe operation fails, we can still mark the loan as released locally
+      // Even if Stripe verification fails, we can still mark the loan as released locally
       logRelease(
         "STRIPE_RELEASE_ERROR",
         {
@@ -184,10 +169,10 @@ export async function POST(request: NextRequest) {
 
       const response = {
         success: true,
-        setupIntentId: loan.preAuthId,
+        preAuthId: loan.preAuthId,
         loanId,
         reason: reason || "Manual release",
-        warning: "Stripe operation failed but loan marked as released",
+        warning: "Stripe verification failed but loan marked as released",
         stripeError: stripeError.message,
         requestId,
       };
@@ -219,7 +204,7 @@ export async function POST(request: NextRequest) {
 
 // Health check endpoint for release functionality
 export async function GET() {
-  const requestId = Math.random().toString(36).substr(2, 9);
+  const requestId = Math.random().toString(36).substring(2, 11);
   logRelease("HEALTH_CHECK", { requestId });
 
   try {

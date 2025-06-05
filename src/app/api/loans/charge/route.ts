@@ -32,7 +32,7 @@ try {
 }
 
 export async function POST(request: NextRequest) {
-  const requestId = Math.random().toString(36).substr(2, 9);
+  const requestId = Math.random().toString(36).substring(2, 11);
   logCharge("CHARGE_REQUEST_START", { requestId });
 
   try {
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       const chargedAmount = amount || loan.preAuthAmount;
-      const mockChargeId = "ch_mock_" + Math.random().toString(36).substr(2, 9);
+      const mockChargeId = "ch_mock_" + Math.random().toString(36).substring(2, 11);
 
       // Update loan in storage
       loanStorage.updateLoan(loanId, {

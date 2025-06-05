@@ -1,11 +1,12 @@
 // src/lib/loanStorage.ts
-import { Loan, CreditSummary } from "@/types";
+import { Loan, CreditSummary, PreAuthData } from "@/types";
 
 // In-memory storage for demo purposes
 // This will be replaced with blockchain data in production
 class LoanStorage {
   private loans: Map<string, Loan> = new Map();
   private walletLoans: Map<string, string[]> = new Map();
+  private preAuthData: Map<string, PreAuthData> = new Map(); // Store pre-auth by wallet address
 
   // Create a new loan
   createLoan(loan: Loan): void {
@@ -17,44 +18,103 @@ class LoanStorage {
     this.walletLoans.set(loan.walletAddress, walletLoans);
 
     console.log(
-      `[LOAN-STORAGE] Created loan ${loan.id} for wallet ${loan.walletAddress}`
+      `[LOAN-STORAGE] ✅ Created loan ${loan.id} for wallet ${loan.walletAddress}`
     );
+    console.log(`[LOAN-STORAGE] 📊 Total loans: ${this.loans.size}`);
+    console.log(
+      `[LOAN-STORAGE] 🏠 Wallet ${loan.walletAddress} now has ${walletLoans.length} loans`
+    );
+
+    // Debug: Log current state
+    this.debugCurrentState();
   }
 
   // Get loan by ID
   getLoan(loanId: string): Loan | undefined {
-    return this.loans.get(loanId);
+    const loan = this.loans.get(loanId);
+    console.log(
+      `[LOAN-STORAGE] 🔍 Getting loan ${loanId}: ${
+        loan ? "found" : "not found"
+      }`
+    );
+    return loan;
   }
 
   // Get all loans for a wallet
   getWalletLoans(walletAddress: string): Loan[] {
+    console.log(`[LOAN-STORAGE] 📋 Getting loans for wallet: ${walletAddress}`);
+
     const loanIds = this.walletLoans.get(walletAddress) || [];
-    return loanIds
-      .map((id) => this.loans.get(id))
-      .filter((loan): loan is Loan => loan !== undefined)
+    console.log(
+      `[LOAN-STORAGE] 🔢 Found ${loanIds.length} loan IDs for wallet`
+    );
+
+    const loans = loanIds
+      .map((id) => {
+        const loan = this.loans.get(id);
+        console.log(
+          `[LOAN-STORAGE] 🔍 Mapping loan ID ${id}: ${
+            loan ? "found" : "missing"
+          }`
+        );
+        return loan;
+      })
+      .filter((loan): loan is Loan => {
+        const exists = loan !== undefined;
+        if (!exists) {
+          console.log(`[LOAN-STORAGE] ⚠️ Filtered out undefined loan`);
+        }
+        return exists;
+      })
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
+
+    console.log(
+      `[LOAN-STORAGE] ✅ Returning ${loans.length} loans for wallet ${walletAddress}`
+    );
+
+    // Log each loan for debugging
+    loans.forEach((loan, index) => {
+      console.log(
+        `[LOAN-STORAGE] 📄 Loan ${index + 1}: ${loan.id} - ${
+          loan.borrowAmount
+        } ${loan.asset} - ${loan.status}`
+      );
+    });
+
+    return loans;
   }
 
   // Update loan status
   updateLoan(loanId: string, updates: Partial<Loan>): boolean {
     const loan = this.loans.get(loanId);
-    if (!loan) return false;
+    if (!loan) {
+      console.log(`[LOAN-STORAGE] ❌ Cannot update loan ${loanId}: not found`);
+      return false;
+    }
 
     const updatedLoan = { ...loan, ...updates };
     this.loans.set(loanId, updatedLoan);
 
-    console.log(`[LOAN-STORAGE] Updated loan ${loanId}:`, updates);
+    console.log(`[LOAN-STORAGE] ✅ Updated loan ${loanId}:`, updates);
     return true;
   }
 
   // Calculate credit summary for a wallet
   getCreditSummary(walletAddress: string): CreditSummary {
+    console.log(
+      `[LOAN-STORAGE] 📊 Calculating credit summary for wallet: ${walletAddress}`
+    );
+
     const loans = this.getWalletLoans(walletAddress);
+    console.log(
+      `[LOAN-STORAGE] 📋 Using ${loans.length} loans for credit summary`
+    );
 
     if (loans.length === 0) {
+      console.log(`[LOAN-STORAGE] 🆕 No loans found, returning zero summary`);
       return {
         totalCreditLimit: 0,
         totalBorrowed: 0,
@@ -69,10 +129,15 @@ class LoanStorage {
     // Use the most recent loan's credit limit as the total
     // In production, this would be fetched from Stripe or stored separately
     const totalCreditLimit = loans[0]?.originalCreditLimit || 0;
+    console.log(`[LOAN-STORAGE] 💳 Total credit limit: ${totalCreditLimit}`);
 
     const activeLoans = loans.filter((loan) => loan.status === "active");
     const chargedLoans = loans.filter((loan) => loan.status === "charged");
     const releasedLoans = loans.filter((loan) => loan.status === "released");
+
+    console.log(
+      `[LOAN-STORAGE] 📈 Loan breakdown: ${activeLoans.length} active, ${chargedLoans.length} charged, ${releasedLoans.length} released`
+    );
 
     const totalBorrowed = activeLoans.reduce(
       (sum, loan) => sum + loan.borrowAmount,
@@ -97,7 +162,7 @@ class LoanStorage {
     const utilizationPercentage =
       totalCreditLimit > 0 ? (currentPreAuths / totalCreditLimit) * 100 : 0;
 
-    return {
+    const summary = {
       totalCreditLimit,
       totalBorrowed,
       totalCharged,
@@ -106,32 +171,95 @@ class LoanStorage {
       utilizationPercentage: Math.round(utilizationPercentage * 100) / 100,
       activeLoans: activeLoans.length,
     };
+
+    console.log(`[LOAN-STORAGE] 📊 Credit summary calculated:`, summary);
+    return summary;
   }
 
   // Get all loans (for admin purposes)
   getAllLoans(): Loan[] {
-    return Array.from(this.loans.values()).sort(
+    const allLoans = Array.from(this.loans.values()).sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
+    console.log(
+      `[LOAN-STORAGE] 📋 Getting all loans: ${allLoans.length} total`
+    );
+    return allLoans;
   }
 
   // Clear all loans (for testing)
   clearAllLoans(): void {
     this.loans.clear();
     this.walletLoans.clear();
-    console.log("[LOAN-STORAGE] Cleared all loans");
+    console.log("[LOAN-STORAGE] 🗑️ Cleared all loans");
   }
 
   // Get storage stats
   getStats() {
-    return {
+    const stats = {
       totalLoans: this.loans.size,
       totalWallets: this.walletLoans.size,
       loansPerWallet: Array.from(this.walletLoans.values()).map(
         (loans) => loans.length
       ),
     };
+    console.log("[LOAN-STORAGE] 📊 Storage stats:", stats);
+    return stats;
+  }
+
+  // Pre-auth data management
+  storePreAuthData(walletAddress: string, preAuth: PreAuthData): void {
+    this.preAuthData.set(walletAddress, preAuth);
+    console.log(`[LOAN-STORAGE] 💳 Stored pre-auth data for wallet ${walletAddress}`);
+  }
+
+  getPreAuthData(walletAddress: string): PreAuthData | undefined {
+    const preAuth = this.preAuthData.get(walletAddress);
+    console.log(`[LOAN-STORAGE] 🔍 Getting pre-auth for wallet ${walletAddress}: ${preAuth ? "found" : "not found"}`);
+    return preAuth;
+  }
+
+  hasPreAuthData(walletAddress: string): boolean {
+    return this.preAuthData.has(walletAddress);
+  }
+
+  // Debug current state
+  debugCurrentState(): void {
+    console.log("[LOAN-STORAGE] 🔍 === CURRENT STATE DEBUG ===");
+    console.log(`[LOAN-STORAGE] 📊 Total loans in storage: ${this.loans.size}`);
+    console.log(
+      `[LOAN-STORAGE] 🏠 Total wallets tracked: ${this.walletLoans.size}`
+    );
+    console.log(
+      `[LOAN-STORAGE] 💳 Total pre-auths stored: ${this.preAuthData.size}`
+    );
+
+    // List all wallets and their loan counts
+    for (const [wallet, loanIds] of this.walletLoans.entries()) {
+      console.log(
+        `[LOAN-STORAGE] 🏠 Wallet ${wallet}: ${loanIds.length} loans`
+      );
+      loanIds.forEach((loanId, index) => {
+        const loan = this.loans.get(loanId);
+        console.log(
+          `[LOAN-STORAGE]   ${index + 1}. ${loanId} - ${
+            loan
+              ? `${loan.borrowAmount} ${loan.asset} (${loan.status})`
+              : "MISSING"
+          }`
+        );
+      });
+    }
+
+    // List pre-auth data
+    for (const [wallet, preAuth] of this.preAuthData.entries()) {
+      console.log(
+        `[LOAN-STORAGE] 💳 Wallet ${wallet}: ${preAuth.available_credit} credit limit, ${preAuth.card_brand} ending in ${preAuth.card_last_four}`
+      );
+    }
+
+    console.log("[LOAN-STORAGE] 🔍 === END STATE DEBUG ===");
   }
 }
 
@@ -140,7 +268,9 @@ export const loanStorage = new LoanStorage();
 
 // Utility functions for loan management
 export const generateLoanId = (): string => {
-  return "loan_" + Math.random().toString(36).substr(2, 9);
+  const id = "loan_" + Math.random().toString(36).substring(2, 11);
+  console.log(`[LOAN-STORAGE] 🆔 Generated loan ID: ${id}`);
+  return id;
 };
 
 export const calculateLoanInterest = (

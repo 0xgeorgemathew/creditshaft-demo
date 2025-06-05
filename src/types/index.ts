@@ -7,6 +7,11 @@ export interface PreAuthData {
   status: "active" | "pending" | "failed";
   wallet_address?: string;
   created_at?: string;
+  // Stripe integration fields
+  preAuthId?: string;
+  customerId?: string;
+  paymentMethodId?: string;
+  setupIntentId?: string;
 }
 
 export interface BorrowingData {

@@ -27,6 +27,7 @@ export default function BorrowingInterface({
   const [isProcessing, setIsProcessing] = useState(false);
   const [borrowSuccess, setBorrowSuccess] = useState(false);
   const [txHash, setTxHash] = useState("");
+  const [loanId, setLoanId] = useState("");
   const [countdown, setCountdown] = useState(3);
 
   // Debug logging for props
@@ -65,7 +66,7 @@ export default function BorrowingInterface({
     }
   }, [borrowSuccess, countdown, onBorrowSuccess]);
 
-  // NEW LOGIC: Calculate required pre-auth amount for 80% LTV
+  // Calculate required pre-auth amount for 80% LTV
   const calculatePreAuthAmount = (borrowAmount: number): number => {
     return Math.ceil(borrowAmount / 0.8); // If borrow 100, pre-auth 125 (100/0.8)
   };
@@ -86,39 +87,62 @@ export default function BorrowingInterface({
       : "0";
 
   const handleBorrow = async () => {
+    console.log("🚀 Starting borrow process...");
     setIsProcessing(true);
 
     try {
-      // First, call the smart contract to create the loan
+      // Enhanced request data with all required fields
+      const requestData = {
+        amount: borrowAmountNum,
+        asset: selectedAsset,
+        walletAddress,
+        preAuthId: preAuthData.preAuthId || "demo_preauth_id",
+        requiredPreAuth,
+        originalCreditLimit: preAuthData.available_credit,
+        customerId: preAuthData.customerId,
+        paymentMethodId: preAuthData.paymentMethodId,
+        setupIntentId: preAuthData.setupIntentId,
+        cardLastFour: preAuthData.card_last_four,
+        cardBrand: preAuthData.card_brand,
+      };
+
+      console.log("📤 Sending borrow request with data:", requestData);
+
       const response = await fetch("/api/borrow", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          amount: borrowAmountNum,
-          asset: selectedAsset,
-          walletAddress,
-          preAuthId: preAuthData.preAuthId || "demo_preauth_id",
-          requiredPreAuth,
-          originalCreditLimit: preAuthData.available_credit,
-          customerId: preAuthData.customerId,
-          paymentMethodId: preAuthData.paymentMethodId,
-        }),
+        body: JSON.stringify(requestData),
       });
 
+      console.log(
+        "📥 Received response:",
+        response.status,
+        response.statusText
+      );
+
       const data = await response.json();
+      console.log("📋 Response data:", data);
 
       if (data.success) {
+        console.log("✅ Borrow successful!");
         setTxHash(data.txHash || data.loanId);
+        setLoanId(data.loanId || "unknown");
         setBorrowSuccess(true);
         setCountdown(3); // Reset countdown
-        // Remove the old timeout since we're using useEffect countdown now
+
+        console.log("💾 Loan created successfully:", {
+          loanId: data.loanId,
+          txHash: data.txHash,
+          amount: data.amount,
+          asset: data.asset,
+        });
       } else {
         throw new Error(data.error || "Borrowing failed");
       }
     } catch (error) {
-      console.error("Borrowing failed:", error);
+      console.error("❌ Borrowing failed:", error);
       alert("Borrowing failed: " + (error as Error).message);
     } finally {
       setIsProcessing(false);
@@ -147,6 +171,9 @@ export default function BorrowingInterface({
               Pre-authorized: ${requiredPreAuth.toLocaleString()} ({ltvRatio}%
               LTV)
             </p>
+            {loanId && (
+              <p className="text-xs text-gray-400 mt-1">Loan ID: {loanId}</p>
+            )}
           </div>
 
           <div className="glassmorphism rounded-xl p-4 mb-6 border border-white/10">

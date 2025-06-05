@@ -156,6 +156,11 @@ function StripeForm({ walletAddress, onPreAuthSuccess }: StripePreAuthProps) {
           status: data.status,
           wallet_address: walletAddress,
           created_at: new Date().toISOString(),
+          // Include Stripe integration fields from API response
+          preAuthId: data.preAuthId,
+          customerId: data.customerId,
+          paymentMethodId: data.paymentMethodId,
+          setupIntentId: data.preAuthId, // setupIntentId is the same as preAuthId
         };
 
         addLog("🎯 Calling onPreAuthSuccess with data", preAuthData);

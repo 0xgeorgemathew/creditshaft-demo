@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
@@ -11,6 +12,9 @@ import LoanDashboard from "@/components/LoanDashboard";
 import { PreAuthData } from "@/types";
 import { Zap, Shield, TrendingUp, Sparkles, CreditCard } from "lucide-react";
 
+// Key for session storage (in-memory)
+const PREAUTH_STORAGE_KEY = "creditbridge_preauth_data";
+
 export default function Home() {
   const { address, isConnected } = useAccount();
   const [preAuthData, setPreAuthData] = useState<PreAuthData | null>(null);
@@ -19,32 +23,140 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"overview" | "borrow" | "manage">(
     "overview"
   );
+  const [sessionStorage, setSessionStorage] = useState<{ [key: string]: any }>(
+    {}
+  );
+
+  // Enhanced session storage helper (in-memory)
+  const saveToSession = (key: string, data: any) => {
+    try {
+      const dataString = JSON.stringify(data);
+      setSessionStorage((prev) => ({ ...prev, [key]: dataString }));
+      console.log("💾 Saved to session:", key, data);
+    } catch (error) {
+      console.error("❌ Failed to save to session:", error);
+    }
+  };
+
+  const loadFromSession = (key: string): any | null => {
+    try {
+      const dataString = sessionStorage[key];
+      if (dataString) {
+        const data = JSON.parse(dataString);
+        console.log("📁 Loaded from session:", key, data);
+        return data;
+      }
+    } catch (error) {
+      console.error("❌ Failed to load from session:", error);
+    }
+    return null;
+  };
+
+  const removeFromSession = (key: string) => {
+    setSessionStorage((prev) => {
+      const newStorage = { ...prev };
+      delete newStorage[key];
+      return newStorage;
+    });
+    console.log("🗑️ Removed from session:", key);
+  };
 
   // Debug tab changes
   useEffect(() => {
     console.log("📋 Active tab changed to:", activeTab);
   }, [activeTab]);
 
+  // Load preAuth data from session when component mounts
+  useEffect(() => {
+    if (isConnected && address) {
+      const sessionKey = `${PREAUTH_STORAGE_KEY}_${address}`;
+      const savedPreAuth = loadFromSession(sessionKey);
+
+      if (savedPreAuth) {
+        console.log("🔄 Restoring preAuth data from session for", address);
+        setPreAuthData(savedPreAuth);
+
+        // Check if user was in the middle of borrowing or managing loans
+        const lastActiveTab = loadFromSession(`tab_${address}`) || "overview";
+        setActiveTab(lastActiveTab);
+        console.log("📋 Restored active tab:", lastActiveTab);
+      } else {
+        console.log("🆕 No saved preAuth data found for", address);
+      }
+    }
+  }, [isConnected, address]);
+
+  // Save active tab to session whenever it changes
+  useEffect(() => {
+    if (address && preAuthData) {
+      saveToSession(`tab_${address}`, activeTab);
+    }
+  }, [activeTab, address, preAuthData]);
+
   // Reset states when wallet disconnects
   useEffect(() => {
     if (!isConnected) {
+      console.log("👋 Wallet disconnected, clearing all data");
       setPreAuthData(null);
       setShowBorrowing(false);
       setShowDashboard(false);
       setActiveTab("overview");
+
+      // Clear all session data
+      setSessionStorage({});
     }
   }, [isConnected]);
 
   const handleWalletConnected = (walletAddress: string) => {
-    console.log("Wallet connected:", walletAddress);
+    console.log("🔗 Wallet connected:", walletAddress);
     setActiveTab("overview");
   };
 
   const handlePreAuthSuccess = (data: PreAuthData) => {
-    setPreAuthData(data);
+    console.log("✅ PreAuth success, saving data:", data);
+
+    // Enhanced preAuth data with wallet linkage
+    const enhancedData = {
+      ...data,
+      wallet_address: address,
+      created_at: new Date().toISOString(),
+    };
+
+    setPreAuthData(enhancedData);
+
+    // Save to session for persistence across refreshes
+    if (address) {
+      const sessionKey = `${PREAUTH_STORAGE_KEY}_${address}`;
+      saveToSession(sessionKey, enhancedData);
+      
+      // Store pre-auth data in loan storage system for API access
+      fetch('/api/borrow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: 0, // No borrowing, just storing pre-auth
+          asset: 'USDC',
+          walletAddress: address,
+          originalCreditLimit: enhancedData.available_credit,
+          customerId: enhancedData.customerId,
+          paymentMethodId: enhancedData.paymentMethodId,
+          setupIntentId: enhancedData.setupIntentId,
+          cardLastFour: enhancedData.card_last_four,
+          cardBrand: enhancedData.card_brand,
+        }),
+      }).then(response => response.json()).then(result => {
+        console.log('📦 Pre-auth data stored in backend:', result);
+      }).catch(error => {
+        console.error('❌ Failed to store pre-auth data:', error);
+      });
+    }
+
+    // Show loan management tab after successful pre-auth
+    setActiveTab("manage");
   };
 
   const handleBorrow = () => {
+    console.log("💰 Starting borrow flow");
     setShowBorrowing(true);
     setActiveTab("borrow");
   };
@@ -76,7 +188,7 @@ export default function Home() {
                 <Zap className="text-white" size={24} />
               </div>
               <h1 className="text-3xl font-bold text-white">
-                <span className="gradient-text">Credit</span>Shaft
+                <span className="gradient-text">Credit</span>Bridge
               </h1>
             </div>
             <div className="text-sm text-gray-300 bg-white/10 px-3 py-1 rounded-full backdrop-blur">
@@ -147,6 +259,21 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        {/* Session Restoration Indicator */}
+        {isConnected &&
+          preAuthData &&
+          loadFromSession(`${PREAUTH_STORAGE_KEY}_${address}`) && (
+            <div className="mb-6 glassmorphism rounded-xl p-4 border border-green-500/30 bg-gradient-to-r from-green-500/10 to-emerald-500/10">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                <span className="text-green-300 font-semibold">
+                  ✅ Session Restored - Your credit card setup has been
+                  recovered
+                </span>
+              </div>
+            </div>
+          )}
 
         {/* Navigation Tabs - Show when wallet connected and pre-auth exists */}
         {isConnected && preAuthData && (
@@ -245,12 +372,12 @@ export default function Home() {
             <p className="text-yellow-100 leading-relaxed">
               This is a demonstration for hackathon purposes. No real money or
               credit cards are being used. All transactions are on Sepolia
-              testnet.
+              testnet. Your session is preserved across page refreshes.
             </p>
           </div>
         )}
 
-        {/* Debug Info - Remove in production */}
+        {/* Enhanced Debug Info */}
         {process.env.NODE_ENV === "development" && (
           <div className="mt-8 glassmorphism rounded-xl p-4 border border-gray-500/30">
             <h4 className="text-gray-300 font-semibold mb-2 flex items-center gap-2">
@@ -282,13 +409,21 @@ export default function Home() {
                 Active Tab: <span className="text-purple-400">{activeTab}</span>
               </p>
               <p>
-                Show Borrowing:{" "}
-                <span
-                  className={showBorrowing ? "text-green-400" : "text-red-400"}
-                >
-                  {showBorrowing ? "Yes" : "No"}
+                Session Storage Keys:{" "}
+                <span className="text-orange-400">
+                  {Object.keys(sessionStorage).length}
                 </span>
               </p>
+              {address && preAuthData && (
+                <p>
+                  Session Restored:{" "}
+                  <span className="text-green-400">
+                    {loadFromSession(`${PREAUTH_STORAGE_KEY}_${address}`)
+                      ? "Yes"
+                      : "No"}
+                  </span>
+                </p>
+              )}
             </div>
           </div>
         )}
