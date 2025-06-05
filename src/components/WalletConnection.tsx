@@ -1,12 +1,36 @@
 "use client";
 
-import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useChainId } from "wagmi";
 import { useEffect, useState } from "react";
 import { Wallet, ExternalLink, Zap } from "lucide-react";
+import { sepolia } from "viem/chains";
+import { avalancheFuji } from "@/config/web3";
 
 interface WalletConnectionProps {
   onWalletConnected: (address: string) => void;
 }
+
+const getExplorerUrl = (chainId: number, address: string) => {
+  switch (chainId) {
+    case sepolia.id:
+      return `https://sepolia.etherscan.io/address/${address}`;
+    case avalancheFuji.id:
+      return `https://testnet.snowscan.xyz//address/${address}`;
+    default:
+      return `https://sepolia.etherscan.io/address/${address}`;
+  }
+};
+
+const getExplorerName = (chainId: number) => {
+  switch (chainId) {
+    case sepolia.id:
+      return "Etherscan";
+    case avalancheFuji.id:
+      return "SnowTrace";
+    default:
+      return "Etherscan";
+  }
+};
 
 export default function WalletConnection({
   onWalletConnected,
@@ -14,6 +38,7 @@ export default function WalletConnection({
   const { address, isConnected, isConnecting } = useAccount();
   const { connect, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
+  const chainId = useChainId();
   const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
@@ -133,12 +158,12 @@ export default function WalletConnection({
               Disconnect
             </button>
             <a
-              href={`https://sepolia.etherscan.io/address/${address}`}
+              href={getExplorerUrl(chainId, address!)}
               target="_blank"
               rel="noopener noreferrer"
               className="glassmorphism hover:bg-white/10 text-white px-6 py-3 rounded-xl transition-all flex items-center gap-2 border border-white/10 font-medium"
             >
-              View on Etherscan <ExternalLink size={16} />
+              View on {getExplorerName(chainId)} <ExternalLink size={16} />
             </a>
           </div>
         </div>

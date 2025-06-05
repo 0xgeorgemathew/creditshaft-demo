@@ -9,6 +9,8 @@ import StripePreAuth from "@/components/StripePreAuth";
 import PreAuthStatus from "@/components/PreAuthStatus";
 import BorrowingInterface from "@/components/BorrowingInterface";
 import LoanDashboard from "@/components/LoanDashboard";
+import NetworkSwitcher from "@/components/NetworkSwitcher";
+import WalletAddress from "@/components/WalletAddress";
 import { PreAuthData } from "@/types";
 import { Zap, Shield, TrendingUp, Sparkles, CreditCard } from "lucide-react";
 
@@ -186,17 +188,27 @@ export default function Home() {
       <header className="relative z-10 border-b border-white/10 backdrop-blur-lg bg-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg glow-blue">
-                <Zap className="text-white" size={24} />
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg glow-blue">
+                  <Zap className="text-white" size={24} />
+                </div>
+                <h1 className="text-3xl font-bold text-white">
+                  <span className="gradient-text">Credit</span>Shaft
+                </h1>
               </div>
-              <h1 className="text-3xl font-bold text-white">
-                <span className="gradient-text">Credit</span>Shaft
-              </h1>
+              <div className="text-sm text-gray-300 bg-white/10 px-3 py-1 rounded-full backdrop-blur">
+                <Sparkles className="inline w-4 h-4 mr-1" />
+                Chromion Hackathon Demo
+              </div>
             </div>
-            <div className="text-sm text-gray-300 bg-white/10 px-3 py-1 rounded-full backdrop-blur">
-              <Sparkles className="inline w-4 h-4 mr-1" />
-              Hackathon Demo • Sepolia Testnet
+            <div className="flex items-center gap-4">
+              {isConnected && <WalletAddress />}
+              {isConnected && (
+                <div className="relative" style={{ zIndex: 10000 }}>
+                  <NetworkSwitcher />
+                </div>
+              )}
             </div>
           </div>
         </div>
