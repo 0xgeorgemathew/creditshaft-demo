@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import { useState, useEffect } from "react";
@@ -6,24 +7,37 @@ import WalletConnection from "@/components/WalletConnection";
 import StripePreAuth from "@/components/StripePreAuth";
 import PreAuthStatus from "@/components/PreAuthStatus";
 import BorrowingInterface from "@/components/BorrowingInterface";
+import LoanDashboard from "@/components/LoanDashboard";
 import { PreAuthData } from "@/types";
-import { Zap, Shield, TrendingUp, Sparkles } from "lucide-react";
+import { Zap, Shield, TrendingUp, Sparkles, CreditCard } from "lucide-react";
 
 export default function Home() {
   const { address, isConnected } = useAccount();
   const [preAuthData, setPreAuthData] = useState<PreAuthData | null>(null);
   const [showBorrowing, setShowBorrowing] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [activeTab, setActiveTab] = useState<"overview" | "borrow" | "manage">(
+    "overview"
+  );
+
+  // Debug tab changes
+  useEffect(() => {
+    console.log("📋 Active tab changed to:", activeTab);
+  }, [activeTab]);
 
   // Reset states when wallet disconnects
   useEffect(() => {
     if (!isConnected) {
       setPreAuthData(null);
       setShowBorrowing(false);
+      setShowDashboard(false);
+      setActiveTab("overview");
     }
   }, [isConnected]);
 
   const handleWalletConnected = (walletAddress: string) => {
     console.log("Wallet connected:", walletAddress);
+    setActiveTab("overview");
   };
 
   const handlePreAuthSuccess = (data: PreAuthData) => {
@@ -32,6 +46,16 @@ export default function Home() {
 
   const handleBorrow = () => {
     setShowBorrowing(true);
+    setActiveTab("borrow");
+  };
+
+  const handleBorrowSuccess = () => {
+    console.log("🎯 handleBorrowSuccess called - starting navigation");
+    console.log("Current activeTab:", activeTab);
+    setShowBorrowing(false);
+    setActiveTab("manage");
+    console.log("Set activeTab to 'manage'");
+    console.log("Redirecting to manage loans tab after successful borrow");
   };
 
   return (
@@ -124,6 +148,47 @@ export default function Home() {
           </div>
         )}
 
+        {/* Navigation Tabs - Show when wallet connected and pre-auth exists */}
+        {isConnected && preAuthData && (
+          <div className="glassmorphism rounded-xl p-2 border border-white/20 mb-8">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveTab("overview")}
+                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                  activeTab === "overview"
+                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
+                    : "text-gray-300 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                <Shield size={16} />
+                Overview
+              </button>
+              <button
+                onClick={() => setActiveTab("borrow")}
+                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                  activeTab === "borrow"
+                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
+                    : "text-gray-300 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                <Zap size={16} />
+                Borrow
+              </button>
+              <button
+                onClick={() => setActiveTab("manage")}
+                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                  activeTab === "manage"
+                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
+                    : "text-gray-300 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                <CreditCard size={16} />
+                Manage Loans
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Main Flow */}
         <div className="space-y-8">
           {/* Step 1: Wallet Connection */}
@@ -143,23 +208,27 @@ export default function Home() {
             </div>
           )}
 
-          {/* Step 3: Pre-Auth Status */}
-          {preAuthData && !showBorrowing && (
+          {/* Step 3: Tabbed Interface */}
+          {preAuthData && address && (
             <div className="transform transition-all duration-500 animate-fade-in">
-              <PreAuthStatus
-                preAuthData={preAuthData}
-                onBorrow={handleBorrow}
-              />
-            </div>
-          )}
+              {activeTab === "overview" && (
+                <PreAuthStatus
+                  preAuthData={preAuthData}
+                  onBorrow={handleBorrow}
+                />
+              )}
 
-          {/* Step 4: Borrowing Interface */}
-          {showBorrowing && preAuthData && address && (
-            <div className="transform transition-all duration-500 animate-fade-in">
-              <BorrowingInterface
-                preAuthData={preAuthData}
-                walletAddress={address}
-              />
+              {activeTab === "borrow" && (
+                <BorrowingInterface
+                  preAuthData={preAuthData}
+                  walletAddress={address}
+                  onBorrowSuccess={handleBorrowSuccess}
+                />
+              )}
+
+              {activeTab === "manage" && (
+                <LoanDashboard walletAddress={address} />
+              )}
             </div>
           )}
         </div>
@@ -208,6 +277,9 @@ export default function Home() {
                 >
                   {preAuthData ? "Yes" : "No"}
                 </span>
+              </p>
+              <p>
+                Active Tab: <span className="text-purple-400">{activeTab}</span>
               </p>
               <p>
                 Show Borrowing:{" "}

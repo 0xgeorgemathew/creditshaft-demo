@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PreAuthData } from "@/types";
 import {
   DollarSign,
@@ -8,22 +8,62 @@ import {
   CheckCircle,
   Copy,
   AlertCircle,
+  CreditCard,
 } from "lucide-react";
 
 interface BorrowingInterfaceProps {
   preAuthData: PreAuthData;
   walletAddress: string;
+  onBorrowSuccess?: () => void;
 }
 
 export default function BorrowingInterface({
   preAuthData,
   walletAddress,
+  onBorrowSuccess,
 }: BorrowingInterfaceProps) {
   const [borrowAmount, setBorrowAmount] = useState("");
   const [selectedAsset, setSelectedAsset] = useState("USDC");
   const [isProcessing, setIsProcessing] = useState(false);
   const [borrowSuccess, setBorrowSuccess] = useState(false);
   const [txHash, setTxHash] = useState("");
+  const [countdown, setCountdown] = useState(3);
+
+  // Debug logging for props
+  useEffect(() => {
+    console.log("🔍 BorrowingInterface mounted with props:");
+    console.log("- preAuthData:", preAuthData);
+    console.log("- walletAddress:", walletAddress);
+    console.log("- onBorrowSuccess available:", !!onBorrowSuccess);
+    console.log("- onBorrowSuccess type:", typeof onBorrowSuccess);
+  }, [preAuthData, walletAddress, onBorrowSuccess]);
+
+  // Countdown timer for auto-redirect
+  useEffect(() => {
+    console.log(
+      "🔄 Countdown useEffect triggered - borrowSuccess:",
+      borrowSuccess,
+      "countdown:",
+      countdown
+    );
+
+    if (borrowSuccess && countdown > 0) {
+      console.log("⏰ Setting countdown timer for", countdown, "seconds");
+      const timer = setTimeout(() => {
+        setCountdown(countdown - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (borrowSuccess && countdown === 0) {
+      console.log("🚀 Countdown reached 0, attempting redirect");
+      console.log("onBorrowSuccess available:", !!onBorrowSuccess);
+      if (onBorrowSuccess) {
+        console.log("📞 Calling onBorrowSuccess callback");
+        onBorrowSuccess();
+      } else {
+        console.error("❌ onBorrowSuccess callback is not available!");
+      }
+    }
+  }, [borrowSuccess, countdown, onBorrowSuccess]);
 
   // NEW LOGIC: Calculate required pre-auth amount for 80% LTV
   const calculatePreAuthAmount = (borrowAmount: number): number => {
@@ -61,14 +101,19 @@ export default function BorrowingInterface({
           walletAddress,
           preAuthId: preAuthData.preAuthId || "demo_preauth_id",
           requiredPreAuth,
+          originalCreditLimit: preAuthData.available_credit,
+          customerId: preAuthData.customerId,
+          paymentMethodId: preAuthData.paymentMethodId,
         }),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setTxHash(data.txHash);
+        setTxHash(data.txHash || data.loanId);
         setBorrowSuccess(true);
+        setCountdown(3); // Reset countdown
+        // Remove the old timeout since we're using useEffect countdown now
       } else {
         throw new Error(data.error || "Borrowing failed");
       }
@@ -137,6 +182,42 @@ export default function BorrowingInterface({
                 <li>• Repay anytime to release the hold</li>
                 <li>• If not repaid, the pre-auth will be captured</li>
               </ul>
+            </div>
+
+            {/* Manual redirect button */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  console.log("🖱️ Manual redirect button clicked");
+                  console.log("onBorrowSuccess available:", !!onBorrowSuccess);
+                  if (onBorrowSuccess) {
+                    console.log("📞 Calling onBorrowSuccess manually");
+                    onBorrowSuccess();
+                  } else {
+                    console.error(
+                      "❌ onBorrowSuccess callback is not available!"
+                    );
+                  }
+                }}
+                className="flex-1 btn-gradient text-white py-3 px-4 rounded-xl font-semibold transition-all transform hover:scale-105 flex items-center justify-center gap-2"
+              >
+                <CreditCard size={16} />
+                View My Loans
+              </button>
+            </div>
+
+            <div className="text-center">
+              <p className="text-xs text-gray-400">
+                {countdown > 0 ? (
+                  <>
+                    Automatically redirecting to loan management in{" "}
+                    <span className="text-blue-300 font-bold">{countdown}</span>{" "}
+                    seconds
+                  </>
+                ) : (
+                  <span className="text-green-300">Redirecting now...</span>
+                )}
+              </p>
             </div>
           </div>
         </div>
