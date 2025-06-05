@@ -83,7 +83,8 @@ export async function POST(request: NextRequest) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       const chargedAmount = amount || loan.preAuthAmount;
-      const mockChargeId = "ch_mock_" + Math.random().toString(36).substring(2, 11);
+      const mockChargeId =
+        "ch_mock_" + Math.random().toString(36).substring(2, 11);
 
       // Update loan in storage
       loanStorage.updateLoan(loanId, {
@@ -132,7 +133,7 @@ export async function POST(request: NextRequest) {
       payment_method: loan.paymentMethodId,
       confirm: true,
       off_session: true, // This is for charging saved payment methods
-      description: `CreditBridge loan charge - ${loanId}`,
+      description: `CreditShaft loan charge - ${loanId}`,
       metadata: {
         loan_id: loanId,
         wallet_address: loan.walletAddress,

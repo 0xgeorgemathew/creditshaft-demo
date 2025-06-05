@@ -13,7 +13,7 @@ import { PreAuthData } from "@/types";
 import { Zap, Shield, TrendingUp, Sparkles, CreditCard } from "lucide-react";
 
 // Key for session storage (in-memory)
-const PREAUTH_STORAGE_KEY = "creditbridge_preauth_data";
+const PREAUTH_STORAGE_KEY = "creditshaft_preauth_data";
 
 export default function Home() {
   const { address, isConnected } = useAccount();
@@ -128,14 +128,14 @@ export default function Home() {
     if (address) {
       const sessionKey = `${PREAUTH_STORAGE_KEY}_${address}`;
       saveToSession(sessionKey, enhancedData);
-      
+
       // Store pre-auth data in loan storage system for API access
-      fetch('/api/borrow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      fetch("/api/borrow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount: 0, // No borrowing, just storing pre-auth
-          asset: 'USDC',
+          asset: "USDC",
           walletAddress: address,
           originalCreditLimit: enhancedData.available_credit,
           customerId: enhancedData.customerId,
@@ -144,11 +144,14 @@ export default function Home() {
           cardLastFour: enhancedData.card_last_four,
           cardBrand: enhancedData.card_brand,
         }),
-      }).then(response => response.json()).then(result => {
-        console.log('📦 Pre-auth data stored in backend:', result);
-      }).catch(error => {
-        console.error('❌ Failed to store pre-auth data:', error);
-      });
+      })
+        .then((response) => response.json())
+        .then((result) => {
+          console.log("📦 Pre-auth data stored in backend:", result);
+        })
+        .catch((error) => {
+          console.error("❌ Failed to store pre-auth data:", error);
+        });
     }
 
     // Show loan management tab after successful pre-auth
@@ -188,7 +191,7 @@ export default function Home() {
                 <Zap className="text-white" size={24} />
               </div>
               <h1 className="text-3xl font-bold text-white">
-                <span className="gradient-text">Credit</span>Bridge
+                <span className="gradient-text">Credit</span>Shaft
               </h1>
             </div>
             <div className="text-sm text-gray-300 bg-white/10 px-3 py-1 rounded-full backdrop-blur">

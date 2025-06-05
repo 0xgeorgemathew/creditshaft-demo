@@ -11,14 +11,15 @@ CreditShaft Demo is a DeFi credit lending platform that allows users to use thei
 ```bash
 # Development
 npm run dev          # Start development server on localhost:3000
-npm run build        # Production build  
+npm run build        # Production build
 npm run start        # Start production server
 npm run lint         # ESLint code quality checks
 ```
 
 ## Core Architecture
 
-### Tech Stack
+### Tech StackCla
+
 - **Next.js 15** with App Router and TypeScript
 - **Wagmi v2 + Viem v2** for Web3 integration (Sepolia testnet)
 - **Stripe** for credit card processing and pre-authorization
@@ -26,12 +27,14 @@ npm run lint         # ESLint code quality checks
 - **React Query** for server state management
 
 ### Application Flow
+
 1. Wallet connection via Wagmi/Reown AppKit
 2. Credit card pre-authorization through Stripe Setup Intent
 3. Loan creation with LTV ratio calculations
 4. Loan management (charge/release operations)
 
 ### API Structure
+
 - `/api/stripe/preauth/` - Credit card pre-authorization setup
 - `/api/borrow/` - Create loans against credit card collateral
 - `/api/loans/` - Loan management and retrieval
@@ -40,6 +43,7 @@ npm run lint         # ESLint code quality checks
 - `/api/liquidate/` - Handle loan liquidations
 
 ### Key Data Models
+
 - **PreAuthData** - Credit card authorization details with Stripe integration
 - **Loan** - Complete loan record linking crypto borrowing to credit card collateral
 - **CreditSummary** - Aggregated credit utilization metrics
@@ -47,27 +51,36 @@ npm run lint         # ESLint code quality checks
 ## Important Implementation Details
 
 ### Logging Pattern
+
 All API endpoints use structured logging with timestamps and request IDs:
+
 ```typescript
 const logFunction = (event: string, data: any, isError: boolean = false) => {
   const timestamp = new Date().toISOString();
   const logLevel = isError ? "ERROR" : "INFO";
-  console.log(`[${timestamp}] [MODULE-${logLevel}] ${event}:`, JSON.stringify(data, null, 2));
+  console.log(
+    `[${timestamp}] [MODULE-${logLevel}] ${event}:`,
+    JSON.stringify(data, null, 2)
+  );
 };
 ```
 
 ### Session Management
+
 - In-memory storage using `src/lib/loanStorage.ts` for demo purposes
 - Wallet address as session key
 - Pre-auth data persistence across page refreshes
 
 ### Demo Mode Configuration
+
 Currently runs in demo mode with:
+
 - Mock smart contract interactions
-- Simulated blockchain transactions  
+- Simulated blockchain transactions
 - Test Stripe payment methods (use 4242424242424242)
 
 ### Environment Variables Required
+
 ```
 STRIPE_SECRET_KEY=sk_test_...           # Stripe API key
 NEXT_PUBLIC_DEMO_MODE=true              # Enable demo mode
