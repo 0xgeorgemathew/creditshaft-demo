@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react/no-unescaped-entities */
 // src/components/LoanDashboard.tsx
 "use client";
@@ -34,6 +33,119 @@ interface LoanCardProps {
 // Individual loan card component
 function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
   const [showDetails, setShowDetails] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState<string>("");
+  const [currentInterest, setCurrentInterest] = useState(0);
+  const [progressPercentage, setProgressPercentage] = useState(0);
+
+  // Calculate real-time countdown and interest
+  useEffect(() => {
+    if (loan.status === "active") {
+      const updateRealTimeData = () => {
+        const now = new Date().getTime();
+        const createdTime = new Date(loan.createdAt).getTime();
+        
+        // Calculate precise time elapsed since loan creation in milliseconds
+        const timeElapsedMs = now - createdTime;
+        const timeElapsedSeconds = timeElapsedMs / 1000;
+        const timeElapsedDays = timeElapsedSeconds / (24 * 60 * 60);
+        
+        // Calculate real-time accrued interest with high precision
+        const annualRate = loan.interestRate / 100;
+        const secondlyRate = annualRate / (365 * 24 * 60 * 60); // Interest per second
+        const realTimeInterest = loan.borrowAmount * secondlyRate * timeElapsedSeconds;
+        setCurrentInterest(realTimeInterest);
+        
+        // Update countdown timer if expiry date exists
+        if (loan.preAuthExpiresAt) {
+          const expiry = new Date(loan.preAuthExpiresAt).getTime();
+          const timeDiff = expiry - now;
+
+          if (timeDiff > 0) {
+            const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+
+            if (days > 0) {
+              setTimeRemaining(`${days}d ${hours}h ${minutes}m ${seconds}s`);
+            } else if (hours > 0) {
+              setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
+            } else if (minutes > 0) {
+              setTimeRemaining(`${minutes}m ${seconds}s`);
+            } else {
+              setTimeRemaining(`${seconds}s`);
+            }
+            
+            // Calculate progress as percentage of time REMAINING (countdown style)
+            let progress = 0;
+            
+            if (loan.preAuthCreatedAt) {
+              // Use actual pre-auth creation time if available
+              const preAuthCreatedTime = new Date(loan.preAuthCreatedAt).getTime();
+              const totalDuration = expiry - preAuthCreatedTime;
+              
+              if (totalDuration > 0 && timeDiff > 0) {
+                progress = (timeDiff / totalDuration) * 100;
+              }
+            } else {
+              // Fallback: use loan creation time
+              const loanCreatedTime = new Date(loan.createdAt).getTime();
+              const totalDuration = expiry - loanCreatedTime;
+              
+              if (totalDuration > 0 && timeDiff > 0) {
+                progress = (timeDiff / totalDuration) * 100;
+              } else {
+                // Final fallback: For 30-day loan, use appropriate duration
+                const estimatedTotalDuration = 30 * 24 * 60 * 60 * 1000; // 30 days in ms
+                if (timeDiff > 0) {
+                  progress = (timeDiff / estimatedTotalDuration) * 100;
+                }
+              }
+            }
+            
+            // Ensure progress is within valid range and never exactly 100% unless expired
+            if (timeDiff > 0) {
+              // If there's still time remaining, ensure progress is reasonable
+              if (progress <= 0 || progress >= 100) {
+                // Fallback calculation for very new loans (showing almost full time remaining)
+                const daysDiff = timeDiff / (24 * 60 * 60 * 1000);
+                if (daysDiff > 25) {
+                  // 30-day loan with >25 days remaining
+                  progress = (timeDiff / (30 * 24 * 60 * 60 * 1000)) * 100;
+                } else if (daysDiff > 5) {
+                  // 7-day loan with >5 days remaining  
+                  progress = (timeDiff / (7 * 24 * 60 * 60 * 1000)) * 100;
+                } else {
+                  // Use actual remaining time percentage
+                  progress = Math.max((daysDiff / 30) * 100, 0.01); // Minimum 0.01%
+                }
+              }
+              
+              // Cap at 99.99% to ensure visibility
+              const finalProgress = Math.max(Math.min(progress, 99.99), 0.01);
+              setProgressPercentage(finalProgress);
+            } else {
+              // Only show 100% when actually expired
+              setProgressPercentage(100);
+            }
+            
+            // Animation trigger for smooth updates
+          } else {
+            setTimeRemaining("EXPIRED");
+            setProgressPercentage(100);
+          }
+        }
+      };
+
+      // Update immediately
+      updateRealTimeData();
+      
+      // Update every 100ms for ultra-smooth progress bar
+      const interval = setInterval(updateRealTimeData, 100);
+      
+      return () => clearInterval(interval);
+    }
+  }, [loan.status, loan.preAuthExpiresAt, loan.createdAt, loan.borrowAmount, loan.interestRate]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -75,7 +187,7 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
   );
 
   const dailyInterest = (loan.borrowAmount * (loan.interestRate / 100)) / 365;
-  const accruedInterest = dailyInterest * Math.max(1, daysActive);
+  const secondlyInterest = dailyInterest / (24 * 60 * 60); // Interest per second for display
 
   return (
     <div className="glassmorphism rounded-xl p-6 border border-white/20 card-hover">
@@ -126,17 +238,158 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
       </div>
 
       {loan.status === "active" && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-4">
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp size={14} className="text-yellow-400" />
-            <span className="text-yellow-300 text-sm font-semibold">
-              Interest Accrued
-            </span>
+        <>
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp size={14} className="text-yellow-400 animate-pulse" />
+              <span className="text-yellow-300 text-sm font-semibold">
+                Interest Accrued (Real-Time)
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="text-yellow-100 text-lg font-mono">
+                ${currentInterest.toFixed(6)}
+              </p>
+              <p className="text-yellow-200 text-xs">
+                +${secondlyInterest.toFixed(8)}/sec
+              </p>
+            </div>
+            <p className="text-yellow-200 text-xs mt-1">
+              Daily: ${dailyInterest.toFixed(4)} | Rate: {loan.interestRate}% APY
+            </p>
           </div>
-          <p className="text-yellow-100 text-sm">
-            ${accruedInterest.toFixed(2)} (${dailyInterest.toFixed(2)}/day)
-          </p>
-        </div>
+
+          {/* Chainlink Automation Countdown Display */}
+          {loan.preAuthExpiresAt && (
+            <div className="glassmorphism rounded-xl p-6 border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-purple-500/10 relative overflow-hidden mb-4">
+              <div className="flex items-center gap-8">
+                {/* Dynamic Circular Progress Credit Card Icon */}
+                <div className="relative flex flex-col items-center">
+                  {/* Main circular progress */}
+                  <svg className="w-24 h-24 transform -rotate-90 relative z-10" viewBox="0 0 96 96">
+                    {/* Background circle - light gray for full circle */}
+                    <circle
+                      cx="48"
+                      cy="48"
+                      r="40"
+                      stroke="rgba(255, 255, 255, 0.2)"
+                      strokeWidth="6"
+                      fill="none"
+                    />
+                    
+                    {/* Progress circle - shows countdown remaining time */}
+                    <circle
+                      cx="48"
+                      cy="48"
+                      r="40"
+                      stroke="url(#countdownGradient)"
+                      strokeWidth="6"
+                      fill="none"
+                      strokeLinecap="round"
+                      className="transition-all duration-100 ease-linear"
+                      style={{
+                        strokeDasharray: `${2 * Math.PI * 40}`,
+                        strokeDashoffset: `${2 * Math.PI * 40 * (1 - progressPercentage / 100)}`
+                      }}
+                    />
+                    
+                    {/* Animated tip at the current progress point - always visible when not expired */}
+                    {timeRemaining !== "EXPIRED" && (
+                      <circle
+                        cx={48 + 40 * Math.cos((progressPercentage * 3.6 - 90) * Math.PI / 180)}
+                        cy={48 + 40 * Math.sin((progressPercentage * 3.6 - 90) * Math.PI / 180)}
+                        r="3"
+                        fill={progressPercentage < 20 ? "#ef4444" : progressPercentage < 50 ? "#fbbf24" : "#22c55e"}
+                        className="animate-pulse"
+                      />
+                    )}
+                    
+                    {/* Dynamic gradient based on time remaining */}
+                    <defs>
+                      <linearGradient id="countdownGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        {progressPercentage < 20 ? (
+                          // Red gradient for critical time
+                          <>
+                            <stop offset="0%" stopColor="#ef4444" />
+                            <stop offset="50%" stopColor="#dc2626" />
+                            <stop offset="100%" stopColor="#b91c1c" />
+                          </>
+                        ) : progressPercentage < 50 ? (
+                          // Yellow gradient for medium time
+                          <>
+                            <stop offset="0%" stopColor="#fbbf24" />
+                            <stop offset="50%" stopColor="#f59e0b" />
+                            <stop offset="100%" stopColor="#d97706" />
+                          </>
+                        ) : (
+                          // Green gradient for plenty of time
+                          <>
+                            <stop offset="0%" stopColor="#22c55e" />
+                            <stop offset="50%" stopColor="#16a34a" />
+                            <stop offset="100%" stopColor="#15803d" />
+                          </>
+                        )}
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                  
+                  {/* Credit Card Icon - perfectly centered */}
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                    {timeRemaining === "EXPIRED" ? (
+                      <AlertCircle className="w-8 h-8 text-red-400 animate-bounce" />
+                    ) : (
+                      <div className="w-8 h-5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm relative border border-blue-400/50">
+                        {/* EMV Chip */}
+                        <div className="absolute top-0.5 left-0.5 w-1 h-0.5 bg-yellow-300 rounded-sm"></div>
+                        {/* Card number */}
+                        <div className="absolute bottom-0 right-0.5 text-white text-xs font-mono">••••</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Progress percentage display */}
+                  <div className={`mt-3 text-xs font-mono font-bold transition-colors duration-300 ${
+                    progressPercentage < 20 ? 'text-red-300' :
+                    progressPercentage < 50 ? 'text-yellow-300' : 'text-green-300'
+                  }`}>
+                    {progressPercentage < 1 && progressPercentage > 0 
+                      ? progressPercentage.toFixed(3)
+                      : progressPercentage < 10 
+                        ? progressPercentage.toFixed(2)
+                        : progressPercentage >= 99
+                          ? progressPercentage.toFixed(2)
+                          : progressPercentage.toFixed(1)
+                    }%
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-blue-300 text-lg font-bold">
+                      Time Remaining
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-blue-200 text-sm">Until auto-charge:</span>
+                      <span className="text-blue-100 font-mono text-lg font-semibold">
+                        {timeRemaining === "EXPIRED" ? "EXPIRED" : timeRemaining}
+                      </span>
+                    </div>
+                    
+                    <div className="glassmorphism rounded-lg p-3 border border-white/10 bg-white/5">
+                      <p className="text-blue-200 text-xs leading-relaxed">
+                        💳 Your credit card will be charged automatically before expiry. Repay early to cancel.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <div className="flex gap-2 mb-4">
@@ -164,6 +417,22 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
                 {loan.preAuthId.slice(0, 20)}...
               </p>
             </div>
+            {loan.preAuthCreatedAt && (
+              <div>
+                <p className="text-gray-400 mb-1">Pre-Auth Created</p>
+                <p className="text-white font-mono">
+                  {formatDate(loan.preAuthCreatedAt)}
+                </p>
+              </div>
+            )}
+            {loan.preAuthExpiresAt && (
+              <div>
+                <p className="text-gray-400 mb-1">Pre-Auth Expires</p>
+                <p className="text-white font-mono">
+                  {formatDate(loan.preAuthExpiresAt)}
+                </p>
+              </div>
+            )}
             {loan.chargedAt && (
               <div>
                 <p className="text-gray-400 mb-1">Charged</p>
@@ -325,7 +594,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
       } else {
         setError(data.error || "Failed to fetch loans");
       }
-    } catch (err) {
+    } catch {
       setError("Network error while fetching loans");
     } finally {
       setIsLoading(false);
@@ -360,7 +629,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
       } else {
         alert(`Charge failed: ${data.error}`);
       }
-    } catch (err) {
+    } catch {
       alert("Network error during charge operation");
     } finally {
       setProcessingLoanId(null);
@@ -395,7 +664,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
       } else {
         alert(`Release failed: ${data.error}`);
       }
-    } catch (err) {
+    } catch {
       alert("Network error during release operation");
     } finally {
       setProcessingLoanId(null);

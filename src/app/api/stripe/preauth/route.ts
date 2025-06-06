@@ -260,7 +260,7 @@ export async function POST(request: NextRequest) {
 
     logStripe("STRIPE_PAYMENT_METHOD_ATTACHED", { requestId, success: true });
 
-    // Create a setup intent for future payments (pre-authorization)
+    // Create a setup intent for saving payment method (no hold yet)
     logStripe("STRIPE_SETUP_INTENT_CREATE_START", {
       requestId,
       customerId: customer.id,
@@ -274,11 +274,11 @@ export async function POST(request: NextRequest) {
       usage: "off_session",
       automatic_payment_methods: {
         enabled: true,
-        allow_redirects: "never", // ← ADD THIS LINE
+        allow_redirects: "never",
       },
       metadata: {
         wallet_address: walletAddress,
-        purpose: "credit_collateral",
+        purpose: "credit_collateral_setup",
         request_id: requestId,
       },
     });

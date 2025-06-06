@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { PreAuthData } from "@/types";
 import {
   DollarSign,
@@ -24,6 +24,7 @@ export default function BorrowingInterface({
 }: BorrowingInterfaceProps) {
   const [borrowAmount, setBorrowAmount] = useState("");
   const [selectedAsset, setSelectedAsset] = useState("USDC");
+  const [selectedDuration, setSelectedDuration] = useState(7); // Default 7 days
   const [isProcessing, setIsProcessing] = useState(false);
   const [borrowSuccess, setBorrowSuccess] = useState(false);
   const [txHash, setTxHash] = useState("");
@@ -39,32 +40,26 @@ export default function BorrowingInterface({
     console.log("- onBorrowSuccess type:", typeof onBorrowSuccess);
   }, [preAuthData, walletAddress, onBorrowSuccess]);
 
+  const handleRedirect = useCallback(() => {
+    if (onBorrowSuccess) {
+      onBorrowSuccess();
+    } else {
+      // Fallback: redirect to main page with a URL parameter
+      window.location.href = "/?tab=manage";
+    }
+  }, [onBorrowSuccess]);
+
   // Countdown timer for auto-redirect
   useEffect(() => {
-    console.log(
-      "🔄 Countdown useEffect triggered - borrowSuccess:",
-      borrowSuccess,
-      "countdown:",
-      countdown
-    );
-
     if (borrowSuccess && countdown > 0) {
-      console.log("⏰ Setting countdown timer for", countdown, "seconds");
       const timer = setTimeout(() => {
         setCountdown(countdown - 1);
       }, 1000);
       return () => clearTimeout(timer);
     } else if (borrowSuccess && countdown === 0) {
-      console.log("🚀 Countdown reached 0, attempting redirect");
-      console.log("onBorrowSuccess available:", !!onBorrowSuccess);
-      if (onBorrowSuccess) {
-        console.log("📞 Calling onBorrowSuccess callback");
-        onBorrowSuccess();
-      } else {
-        console.error("❌ onBorrowSuccess callback is not available!");
-      }
+      handleRedirect();
     }
-  }, [borrowSuccess, countdown, onBorrowSuccess]);
+  }, [borrowSuccess, countdown, handleRedirect]);
 
   // Calculate required pre-auth amount for 80% LTV
   const calculatePreAuthAmount = (borrowAmount: number): number => {
@@ -74,9 +69,9 @@ export default function BorrowingInterface({
   const maxBorrow = preAuthData.available_credit; // User can borrow up to their full credit limit
 
   const assets = [
-    { symbol: "USDC", name: "USD Coin", rate: "5.2%", address: "0x..." },
-    { symbol: "USDT", name: "Tether", rate: "4.8%", address: "0x..." },
-    { symbol: "DAI", name: "Dai Stablecoin", rate: "5.5%", address: "0x..." },
+    { symbol: "USDC", name: "USD Coin", rate: "5.2%" },
+    { symbol: "USDT", name: "Tether", rate: "4.8%" },
+    { symbol: "DAI", name: "Dai Stablecoin", rate: "5.5%" },
   ];
 
   const borrowAmountNum = parseFloat(borrowAmount) || 0;
@@ -98,6 +93,7 @@ export default function BorrowingInterface({
         walletAddress,
         preAuthId: preAuthData.preAuthId || "demo_preauth_id",
         requiredPreAuth,
+        preAuthDurationDays: selectedDuration,
         originalCreditLimit: preAuthData.available_credit,
         customerId: preAuthData.customerId,
         paymentMethodId: preAuthData.paymentMethodId,
@@ -214,18 +210,7 @@ export default function BorrowingInterface({
             {/* Manual redirect button */}
             <div className="flex gap-3">
               <button
-                onClick={() => {
-                  console.log("🖱️ Manual redirect button clicked");
-                  console.log("onBorrowSuccess available:", !!onBorrowSuccess);
-                  if (onBorrowSuccess) {
-                    console.log("📞 Calling onBorrowSuccess manually");
-                    onBorrowSuccess();
-                  } else {
-                    console.error(
-                      "❌ onBorrowSuccess callback is not available!"
-                    );
-                  }
-                }}
+                onClick={handleRedirect}
                 className="flex-1 btn-gradient text-white py-3 px-4 rounded-xl font-semibold transition-all transform hover:scale-105 flex items-center justify-center gap-2"
               >
                 <CreditCard size={16} />
@@ -310,6 +295,77 @@ export default function BorrowingInterface({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-200 mb-3">
+              Pre-Authorization Duration
+            </label>
+            <div className="glassmorphism rounded-xl p-4 border border-white/20">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-gray-300">Duration:</span>
+                <span className="text-lg font-semibold text-white">
+                  {selectedDuration === 1 ? "1 Day" : 
+                   selectedDuration === 7 ? "7 Days" : 
+                   selectedDuration === 30 ? "1 Month" : `${selectedDuration} Days`}
+                </span>
+              </div>
+              
+              <div className="relative">
+                <input
+                  type="range"
+                  min="1"
+                  max="30"
+                  value={selectedDuration}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value);
+                    // Snap to preset values
+                    if (value <= 3) setSelectedDuration(1);
+                    else if (value <= 18) setSelectedDuration(7);
+                    else setSelectedDuration(30);
+                  }}
+                  className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider-thumb"
+                  style={{
+                    background: `linear-gradient(to right, 
+                      #3b82f6 0%, 
+                      #3b82f6 ${((selectedDuration === 1 ? 1 : selectedDuration === 7 ? 7 : 30) / 30) * 100}%, 
+                      rgba(255,255,255,0.2) ${((selectedDuration === 1 ? 1 : selectedDuration === 7 ? 7 : 30) / 30) * 100}%, 
+                      rgba(255,255,255,0.2) 100%)`
+                  }}
+                />
+                <div className="flex justify-between mt-2 text-xs text-gray-400">
+                  <button
+                    onClick={() => setSelectedDuration(1)}
+                    className={`px-2 py-1 rounded transition-colors ${
+                      selectedDuration === 1 ? 'text-blue-300 bg-blue-500/20' : 'hover:text-white'
+                    }`}
+                  >
+                    1 Day
+                  </button>
+                  <button
+                    onClick={() => setSelectedDuration(7)}
+                    className={`px-2 py-1 rounded transition-colors ${
+                      selectedDuration === 7 ? 'text-blue-300 bg-blue-500/20' : 'hover:text-white'
+                    }`}
+                  >
+                    7 Days
+                  </button>
+                  <button
+                    onClick={() => setSelectedDuration(30)}
+                    className={`px-2 py-1 rounded transition-colors ${
+                      selectedDuration === 30 ? 'text-blue-300 bg-blue-500/20' : 'hover:text-white'
+                    }`}
+                  >
+                    1 Month
+                  </button>
+                </div>
+              </div>
+              
+              <div className="mt-3 text-xs text-gray-400">
+                <p>💡 Pre-authorization will automatically expire after this duration</p>
+                <p>⚠️ You must charge or release before expiry to avoid automatic cancellation</p>
+              </div>
+            </div>
           </div>
 
           {/* Warning if pre-auth exceeds credit limit */}
@@ -402,7 +458,7 @@ export default function BorrowingInterface({
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-400">Daily Interest:</span>
                     <span className="text-gray-300">
-                      ${((borrowAmountNum * 0.052) / 365).toFixed(2)}
+                      ${((borrowAmountNum * (parseFloat(assets.find(a => a.symbol === selectedAsset)?.rate || "5.2") / 100)) / 365).toFixed(2)}
                     </span>
                   </div>
                 </>

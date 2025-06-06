@@ -43,12 +43,16 @@ export interface Loan {
 
   // Timestamps
   createdAt: string;
+  preAuthCreatedAt?: string;
+  preAuthExpiresAt?: string;
   chargedAt?: string;
   releasedAt?: string;
 
   // Stripe data
   stripeChargeId?: string;
   actualChargedAmount?: number;
+  stripePreAuthStatus?: string;
+  stripePreAuthAmount?: number;
 
   // Transaction data
   txHash?: string;
@@ -84,4 +88,76 @@ export interface StripeReleaseResponse {
   setupIntentId?: string;
   error?: string;
   stripeResponse?: any;
+}
+
+// Chainlink Integration Types
+export interface ChainlinkLoanData {
+  loanId: string;
+  borrower: string; // wallet address
+  borrowAmount: string; // in wei
+  collateralAmount: string; // USD amount scaled by 1e8
+  stripePaymentIntentId: string; // for direct Stripe API calls
+  createdAt: number; // timestamp
+  expiryTimestamp: number; // when pre-auth expires
+  triggerTimestamp: number; // when automation should trigger (1 hour before expiry)
+  isActive: boolean;
+  autoChargeEnabled: boolean;
+}
+
+export interface ChainlinkAutomationJob {
+  loanId: string;
+  triggerTime: number;
+  executed: boolean;
+  cancelled: boolean;
+  lastChecked?: number;
+}
+
+export interface ChainlinkFunctionResponse {
+  success: boolean;
+  loanId: string;
+  chargedAmount?: number;
+  stripeChargeId?: string;
+  error?: string;
+  timestamp: number;
+}
+
+// Enhanced Loan interface for blockchain integration
+export interface BlockchainLoan extends Loan {
+  // Blockchain specific fields
+  contractAddress?: string;
+  chainId?: number;
+  blockNumber?: number;
+  automationUpkeepId?: string;
+  functionsSubscriptionId?: string;
+  
+  // Automation status
+  automationStatus: 'pending' | 'scheduled' | 'triggered' | 'cancelled' | 'failed';
+  nextAutomationCheck?: string;
+  automationGasUsed?: number;
+  
+  // Chainlink metadata
+  chainlinkJobId?: string;
+  chainlinkRequestId?: string;
+  chainlinkResponse?: ChainlinkFunctionResponse;
+}
+
+// Configuration for smart contract deployment
+export interface SmartContractConfig {
+  network: 'sepolia' | 'avalanche-fuji';
+  contractAddress: string;
+  chainlinkRouter: string;
+  automationRegistry: string;
+  functionsSubscriptionId: string;
+  gasLimit: number;
+  linkTokenAddress: string;
+}
+
+// Event types for blockchain monitoring
+export interface ChainlinkEvent {
+  type: 'LoanCreated' | 'AutomationScheduled' | 'AutoChargeExecuted' | 'LoanLiquidated' | 'LoanReleased';
+  loanId: string;
+  blockNumber: number;
+  transactionHash: string;
+  timestamp: number;
+  data: any;
 }

@@ -1,38 +1,14 @@
 // src/app/api/loans/charge/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
 import { loanStorage } from "@/lib/loanStorage";
+import { createLogger, generateRequestId } from "@/lib/logger";
+import { getStripeInstance } from "@/lib/stripe-server";
 
-// Enhanced logging utility
-const logCharge = (event: string, data: any, isError: boolean = false) => {
-  const timestamp = new Date().toISOString();
-  const logLevel = isError ? "ERROR" : "INFO";
-  console.log(
-    `[${timestamp}] [CHARGE-${logLevel}] ${event}:`,
-    JSON.stringify(data, null, 2)
-  );
-};
-
-// Initialize Stripe
-let stripe: Stripe | null = null;
-try {
-  if (process.env.STRIPE_SECRET_KEY) {
-    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-    logCharge("STRIPE_INITIALIZED", { success: true });
-  } else {
-    logCharge(
-      "STRIPE_INIT_ERROR",
-      { error: "STRIPE_SECRET_KEY not found" },
-      true
-    );
-  }
-} catch (error) {
-  logCharge("STRIPE_INIT_ERROR", { error }, true);
-}
+const logCharge = createLogger("CHARGE");
 
 export async function POST(request: NextRequest) {
-  const requestId = Math.random().toString(36).substring(2, 11);
+  const requestId = generateRequestId();
   logCharge("CHARGE_REQUEST_START", { requestId });
 
   try {
@@ -44,6 +20,18 @@ export async function POST(request: NextRequest) {
       logCharge("VALIDATION_ERROR", { requestId, error }, true);
       return NextResponse.json({ success: false, error }, { status: 400 });
     }
+
+    // Debug: Check what loans exist in storage
+    const storageDebugInfo = loanStorage.getDebugInfo();
+    const debugInfo = {
+      requestId,
+      loanId,
+      storageInstance: !!loanStorage,
+      globalStorageExists: !!(globalThis as any).__loanStorage,
+      sameInstance: loanStorage === (globalThis as any).__loanStorage,
+      ...storageDebugInfo
+    };
+    logCharge("DEBUG_STORAGE_STATE", debugInfo);
 
     // Get loan from storage
     const loan = loanStorage.getLoan(loanId);
@@ -108,11 +96,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Production Stripe charge
-    if (!stripe) {
-      const error = "Stripe not properly configured";
-      logCharge("STRIPE_NOT_CONFIGURED", { requestId }, true);
-      return NextResponse.json({ success: false, error }, { status: 500 });
-    }
+    const stripe = getStripeInstance();
 
     // Calculate charge amount (use provided amount or full pre-auth amount)
     const chargeAmount = amount || loan.preAuthAmount;
@@ -125,28 +109,40 @@ export async function POST(request: NextRequest) {
       currency: "usd",
     });
 
-    // Create payment intent and capture immediately
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(chargeAmount * 100), // Convert to cents
-      currency: "usd",
-      customer: loan.customerId,
-      payment_method: loan.paymentMethodId,
-      confirm: true,
-      off_session: true, // This is for charging saved payment methods
-      description: `CreditShaft loan charge - ${loanId}`,
-      metadata: {
-        loan_id: loanId,
-        wallet_address: loan.walletAddress,
-        reason: reason || "Manual charge",
-        request_id: requestId,
-      },
+    // Capture the existing pre-authorization instead of creating new charge
+    const paymentIntentId = loan.preAuthId;
+    
+    logCharge("CAPTURING_PREAUTH", {
+      requestId,
+      paymentIntentId,
+      originalPreAuthAmount: loan.preAuthAmount,
+      captureAmount: chargeAmount
     });
 
-    logCharge("STRIPE_PAYMENT_INTENT_CREATED", {
+    // First, get the current PaymentIntent to check its status
+    const existingPaymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    
+    if (existingPaymentIntent.status !== "requires_capture") {
+      const error = `Cannot capture pre-authorization. Current status: ${existingPaymentIntent.status}`;
+      logCharge("PREAUTH_NOT_CAPTURABLE", {
+        requestId,
+        paymentIntentId,
+        currentStatus: existingPaymentIntent.status
+      }, true);
+      return NextResponse.json({ success: false, error }, { status: 400 });
+    }
+
+    // Capture the pre-authorization (can be partial or full amount)
+    const paymentIntent = await stripe.paymentIntents.capture(paymentIntentId, {
+      amount_to_capture: Math.round(chargeAmount * 100), // Convert to cents
+    });
+
+    logCharge("STRIPE_PREAUTH_CAPTURED", {
       requestId,
       paymentIntentId: paymentIntent.id,
       status: paymentIntent.status,
-      amount: paymentIntent.amount,
+      capturedAmount: paymentIntent.amount_received,
+      originalAmount: existingPaymentIntent.amount,
     });
 
     if (paymentIntent.status === "succeeded") {

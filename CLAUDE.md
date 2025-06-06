@@ -17,6 +17,29 @@ npm run lint         # ESLint code quality checks
 npx tsc --noEmit     # TypeScript type checking
 ```
 
+## 🔗 Enhanced Chainlink Integration
+
+For complete smart contract development and **direct Stripe API integration**, see:
+📋 **[CHAINLINK_INTEGRATION_GUIDE.md](./CHAINLINK_INTEGRATION_GUIDE.md)**
+
+This comprehensive guide includes:
+- **Enhanced Smart Contract Architecture** with direct Stripe API integration
+- **Chainlink Automation** for automated pre-auth expiry monitoring  
+- **Chainlink Functions** calling Stripe API **directly** (no intermediary API)
+- **Data Architecture Guide** - On-chain vs Off-chain data distribution
+- **Complete Type Definitions** for blockchain integration
+- **Enhanced State Changes** to qualify for Chainlink prizes
+- **Frontend integration** with webhook endpoints and real-time updates
+- **Deployment instructions** and secrets management
+
+### ✅ Key Enhancements Made:
+- **Direct Stripe Integration**: Chainlink Functions → Stripe API (eliminates intermediary)
+- **Enhanced Security**: Stripe keys stored in Chainlink secrets
+- **Improved Performance**: Reduced latency and failure points
+- **Complete Type Safety**: Full TypeScript integration for smart contracts
+
+> ⚠️ **Hackathon Requirement**: Each project must use Chainlink to make state changes on blockchain. Simply reading from data feeds doesn't qualify for core prizes.
+
 ## Core Architecture
 
 ### Tech Stack
@@ -67,16 +90,21 @@ All components follow glassmorphism design system with:
 ### API Structure
 
 - `/api/stripe/preauth/` - Credit card pre-authorization setup
-- `/api/borrow/` - Create loans against credit card collateral
+- `/api/borrow/` - Create loans and register with smart contracts
 - `/api/loans/` - Loan management and retrieval
-- `/api/loans/charge/` - Capture credit card pre-auth for liquidation
-- `/api/loans/release/` - Release credit card hold
-- `/api/liquidate/` - Handle loan liquidations
+- `/api/loans/charge/` - Capture credit card pre-auth for liquidation (legacy)
+- `/api/loans/release/` - Release credit card hold (legacy)
+- `/api/liquidate/` - Handle loan liquidations (legacy)
+- `/api/chainlink/webhook/` - **NEW**: Receive smart contract events and update loan status
 
 ### Key Data Models
 
 - **PreAuthData** - Credit card authorization details with Stripe integration
 - **Loan** - Complete loan record linking crypto borrowing to credit card collateral
+- **BlockchainLoan** - **NEW**: Enhanced loan interface with Chainlink automation fields
+- **ChainlinkLoanData** - **NEW**: Smart contract data format for blockchain integration
+- **ChainlinkAutomationJob** - **NEW**: Automation tracking and status
+- **SmartContractConfig** - **NEW**: Network-specific smart contract configurations
 - **CreditSummary** - Aggregated credit utilization metrics
 - **Network Configuration** - Chain-specific explorer URLs and metadata
 
@@ -133,10 +161,11 @@ The main page header (`src/app/page.tsx:189-215`) uses a strategic layout:
 
 Currently runs in demo mode with:
 
-- Mock smart contract interactions
+- Mock smart contract interactions (will be replaced with real Chainlink integration)
 - Simulated blockchain transactions
 - Test Stripe payment methods (use 4242424242424242)
 - Multi-network testing environment
+- **NEW**: Chainlink automation simulation via webhook endpoints
 
 ### Environment Variables Required
 
@@ -163,7 +192,30 @@ NEXT_PUBLIC_REOWN_PROJECT_ID=...        # Web3 connection project ID
 - `src/components/WalletAddress.tsx` - Address display with copy/explorer functionality
 - `src/components/WalletConnection.tsx` - Enhanced wallet connection with network awareness
 
+### **NEW**: Chainlink Integration Files
+- `src/lib/chainlink-integration.ts` - **NEW**: Core utilities for smart contract integration
+- `src/app/api/chainlink/webhook/route.ts` - **NEW**: Smart contract event handler
+- `src/types/index.ts` - **ENHANCED**: Added comprehensive Chainlink types
+- `CHAINLINK_INTEGRATION_GUIDE.md` - **ENHANCED**: Direct Stripe API integration guide
+
+### **NEW**: Chainlink Type Definitions
+All located in `src/types/index.ts`:
+- `ChainlinkLoanData` - Smart contract loan format
+- `BlockchainLoan` - Enhanced loan with automation fields
+- `ChainlinkAutomationJob` - Automation tracking
+- `ChainlinkFunctionResponse` - Functions response format
+- `SmartContractConfig` - Network-specific configurations
+- `ChainlinkEvent` - Event monitoring types
+
 ### Network-Specific Configurations
-- Sepolia: Etherscan integration, blue color scheme
-- Avalanche Fuji: SnowTrace integration, red-orange color scheme
+- Sepolia: Etherscan integration, blue color scheme, Chainlink router configured
+- Avalanche Fuji: SnowTrace integration, red-orange color scheme, Chainlink router configured
 - Automatic explorer URL generation based on active network
+- **NEW**: Chainlink router and automation registry addresses per network
+
+### **NEW**: Smart Contract Integration Utilities
+- Data conversion utilities (wei, USD scaling)
+- Validation functions for blockchain data
+- Contract ABI definitions
+- Deployment script generators
+- Network-specific Chainlink configurations

@@ -11,7 +11,7 @@ import BorrowingInterface from "@/components/BorrowingInterface";
 import LoanDashboard from "@/components/LoanDashboard";
 import NetworkSwitcher from "@/components/NetworkSwitcher";
 import WalletAddress from "@/components/WalletAddress";
-import { PreAuthData } from "@/types";
+import { PreAuthData, Loan } from "@/types";
 import { Zap, Shield, TrendingUp, Sparkles, CreditCard } from "lucide-react";
 
 // Key for session storage (in-memory)
@@ -22,12 +22,13 @@ export default function Home() {
   const [preAuthData, setPreAuthData] = useState<PreAuthData | null>(null);
   const [showBorrowing, setShowBorrowing] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "borrow" | "manage">(
+  const [activeTab, setActiveTab] = useState<"overview" | "borrow" | "manage" | "setup">(
     "overview"
   );
   const [sessionStorage, setSessionStorage] = useState<{ [key: string]: any }>(
     {}
   );
+  const [hasActiveLoans, setHasActiveLoans] = useState(false);
 
   // Enhanced session storage helper (in-memory)
   const saveToSession = (key: string, data: any) => {
@@ -63,6 +64,24 @@ export default function Home() {
     console.log("🗑️ Removed from session:", key);
   };
 
+  // Check for active loans
+  const checkActiveLoans = async () => {
+    if (!address) return;
+    
+    try {
+      const response = await fetch(`/api/loans?wallet=${encodeURIComponent(address)}`);
+      const data = await response.json();
+      
+      if (data.success && data.loans) {
+        const activeLoans = data.loans.filter((loan: Loan) => loan.status === "active");
+        setHasActiveLoans(activeLoans.length > 0);
+        console.log("🔍 Active loans check:", activeLoans.length, "active loans found");
+      }
+    } catch (error) {
+      console.error("❌ Failed to check active loans:", error);
+    }
+  };
+
   // Debug tab changes
   useEffect(() => {
     console.log("📋 Active tab changed to:", activeTab);
@@ -85,6 +104,9 @@ export default function Home() {
       } else {
         console.log("🆕 No saved preAuth data found for", address);
       }
+      
+      // Check for active loans whenever wallet connects
+      checkActiveLoans();
     }
   }, [isConnected, address]);
 
@@ -111,6 +133,7 @@ export default function Home() {
 
   const handleWalletConnected = (walletAddress: string) => {
     console.log("🔗 Wallet connected:", walletAddress);
+    // Always redirect to overview after wallet connection
     setActiveTab("overview");
   };
 
@@ -156,14 +179,23 @@ export default function Home() {
         });
     }
 
-    // Show loan management tab after successful pre-auth
-    setActiveTab("manage");
+    // Show overview tab after successful pre-auth
+    setActiveTab("overview");
   };
 
   const handleBorrow = () => {
     console.log("💰 Starting borrow flow");
-    setShowBorrowing(true);
-    setActiveTab("borrow");
+    // Only proceed to borrow tab if pre-auth data exists
+    if (preAuthData) {
+      setShowBorrowing(true);
+      setActiveTab("borrow");
+    } else {
+      // If no pre-auth data, user needs to set up card first
+      console.log("No pre-auth data, user needs to set up card first");
+      // This shouldn't happen since borrow button only shows when pre-auth exists
+      // But adding as safety measure
+      setActiveTab("overview");
+    }
   };
 
   const handleBorrowSuccess = () => {
@@ -173,6 +205,9 @@ export default function Home() {
     setActiveTab("manage");
     console.log("Set activeTab to 'manage'");
     console.log("Redirecting to manage loans tab after successful borrow");
+    
+    // Check for active loans after successful borrow
+    checkActiveLoans();
   };
 
   return (
@@ -290,47 +325,6 @@ export default function Home() {
             </div>
           )}
 
-        {/* Navigation Tabs - Show when wallet connected and pre-auth exists */}
-        {isConnected && preAuthData && (
-          <div className="glassmorphism rounded-xl p-2 border border-white/20 mb-8">
-            <div className="flex gap-2">
-              <button
-                onClick={() => setActiveTab("overview")}
-                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-                  activeTab === "overview"
-                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
-                    : "text-gray-300 hover:text-white hover:bg-white/10"
-                }`}
-              >
-                <Shield size={16} />
-                Overview
-              </button>
-              <button
-                onClick={() => setActiveTab("borrow")}
-                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-                  activeTab === "borrow"
-                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
-                    : "text-gray-300 hover:text-white hover:bg-white/10"
-                }`}
-              >
-                <Zap size={16} />
-                Borrow
-              </button>
-              <button
-                onClick={() => setActiveTab("manage")}
-                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-                  activeTab === "manage"
-                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
-                    : "text-gray-300 hover:text-white hover:bg-white/10"
-                }`}
-              >
-                <CreditCard size={16} />
-                Manage Loans
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Main Flow */}
         <div className="space-y-8">
           {/* Step 1: Wallet Connection */}
@@ -340,36 +334,126 @@ export default function Home() {
             </div>
           )}
 
-          {/* Step 2: Credit Card Pre-Auth */}
-          {isConnected && address && !preAuthData && (
-            <div className="transform transition-all duration-500 animate-fade-in">
-              <StripePreAuth
-                walletAddress={address}
-                onPreAuthSuccess={handlePreAuthSuccess}
-              />
-            </div>
-          )}
 
-          {/* Step 3: Tabbed Interface */}
-          {preAuthData && address && (
+          {/* Step 2: Main Interface (always show when connected) */}
+          {isConnected && address && (
             <div className="transform transition-all duration-500 animate-fade-in">
-              {activeTab === "overview" && (
-                <PreAuthStatus
-                  preAuthData={preAuthData}
-                  onBorrow={handleBorrow}
-                />
+              {!preAuthData ? (
+                /* Welcome Overview - No Credit Card Setup Yet */
+                <div className="glassmorphism rounded-2xl shadow-2xl p-8 border border-white/20">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Shield className="text-white" size={32} />
+                    </div>
+                    <h2 className="text-3xl font-bold text-white mb-4">
+                      Welcome to CreditShaft! 👋
+                    </h2>
+                    <p className="text-gray-300 text-lg mb-6 max-w-2xl mx-auto">
+                      To start borrowing crypto against your credit card, you'll need to set up a secure pre-authorization. 
+                      This allows us to hold funds on your card without charging until needed.
+                    </p>
+                    
+                    <div className="grid md:grid-cols-3 gap-6 mb-8">
+                      <div className="bg-white/5 rounded-xl p-4">
+                        <div className="text-2xl mb-2">🔒</div>
+                        <h3 className="font-semibold text-white mb-2">Secure Setup</h3>
+                        <p className="text-gray-300 text-sm">Your card info is encrypted and never stored on our servers</p>
+                      </div>
+                      <div className="bg-white/5 rounded-xl p-4">
+                        <div className="text-2xl mb-2">⚡</div>
+                        <h3 className="font-semibold text-white mb-2">Instant Loans</h3>
+                        <p className="text-gray-300 text-sm">Borrow crypto instantly with up to 80% LTV ratio</p>
+                      </div>
+                      <div className="bg-white/5 rounded-xl p-4">
+                        <div className="text-2xl mb-2">💳</div>
+                        <h3 className="font-semibold text-white mb-2">No Charges</h3>
+                        <p className="text-gray-300 text-sm">Only charged if you don't repay by expiry date</p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        // Show the credit card setup
+                        setActiveTab("setup");
+                      }}
+                      className="btn-gradient text-white py-4 px-8 rounded-xl font-bold text-lg shadow-lg hover:shadow-2xl transition-all transform hover:scale-105 flex items-center justify-center gap-3 mx-auto"
+                    >
+                      <CreditCard size={20} />
+                      Set Up Credit Card
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Tabbed Interface when preAuth exists */
+                <>
+                  {/* Navigation Tabs */}
+                  <div className="glassmorphism rounded-xl p-2 border border-white/20 mb-8">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setActiveTab("overview")}
+                        className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                          activeTab === "overview"
+                            ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
+                            : "text-gray-300 hover:text-white hover:bg-white/10"
+                        }`}
+                      >
+                        <Shield size={16} />
+                        Overview
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("borrow")}
+                        className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                          activeTab === "borrow"
+                            ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
+                            : "text-gray-300 hover:text-white hover:bg-white/10"
+                        }`}
+                      >
+                        <Zap size={16} />
+                        Borrow
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("manage")}
+                        className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                          activeTab === "manage"
+                            ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
+                            : "text-gray-300 hover:text-white hover:bg-white/10"
+                        }`}
+                      >
+                        <CreditCard size={16} />
+                        Manage Loans
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tab Content */}
+                  {activeTab === "overview" && (
+                    <PreAuthStatus
+                      preAuthData={preAuthData}
+                      onBorrow={handleBorrow}
+                      hasActiveLoans={hasActiveLoans}
+                    />
+                  )}
+
+                  {activeTab === "borrow" && (
+                    <BorrowingInterface
+                      preAuthData={preAuthData}
+                      walletAddress={address}
+                      onBorrowSuccess={handleBorrowSuccess}
+                    />
+                  )}
+
+                  {activeTab === "manage" && (
+                    <LoanDashboard walletAddress={address} />
+                  )}
+                </>
               )}
 
-              {activeTab === "borrow" && (
-                <BorrowingInterface
-                  preAuthData={preAuthData}
+              {/* Credit Card Setup Tab */}
+              {activeTab === "setup" && !preAuthData && (
+                <StripePreAuth
                   walletAddress={address}
-                  onBorrowSuccess={handleBorrowSuccess}
+                  onPreAuthSuccess={handlePreAuthSuccess}
                 />
-              )}
-
-              {activeTab === "manage" && (
-                <LoanDashboard walletAddress={address} />
               )}
             </div>
           )}

@@ -1,38 +1,14 @@
 // src/app/api/loans/release/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
 import { loanStorage } from "@/lib/loanStorage";
+import { createLogger, generateRequestId } from "@/lib/logger";
+import { getStripeInstance } from "@/lib/stripe-server";
 
-// Enhanced logging utility
-const logRelease = (event: string, data: any, isError: boolean = false) => {
-  const timestamp = new Date().toISOString();
-  const logLevel = isError ? "ERROR" : "INFO";
-  console.log(
-    `[${timestamp}] [RELEASE-${logLevel}] ${event}:`,
-    JSON.stringify(data, null, 2)
-  );
-};
-
-// Initialize Stripe
-let stripe: Stripe | null = null;
-try {
-  if (process.env.STRIPE_SECRET_KEY) {
-    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-    logRelease("STRIPE_INITIALIZED", { success: true });
-  } else {
-    logRelease(
-      "STRIPE_INIT_ERROR",
-      { error: "STRIPE_SECRET_KEY not found" },
-      true
-    );
-  }
-} catch (error) {
-  logRelease("STRIPE_INIT_ERROR", { error }, true);
-}
+const logRelease = createLogger("RELEASE");
 
 export async function POST(request: NextRequest) {
-  const requestId = Math.random().toString(36).substring(2, 11);
+  const requestId = generateRequestId();
   logRelease("RELEASE_REQUEST_START", { requestId });
 
   try {
@@ -96,11 +72,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Production Stripe release
-    if (!stripe) {
-      const error = "Stripe not properly configured";
-      logRelease("STRIPE_NOT_CONFIGURED", { requestId }, true);
-      return NextResponse.json({ success: false, error }, { status: 500 });
-    }
+    const stripe = getStripeInstance();
 
     logRelease("STRIPE_RELEASE_START", {
       requestId,
@@ -109,43 +81,80 @@ export async function POST(request: NextRequest) {
       paymentMethodId: loan.paymentMethodId,
     });
 
-    // For real implementation, we simulate releasing the hold by marking it as released
-    // In production, this would involve:
-    // 1. Checking if any actual charges exist and issuing refunds if needed
-    // 2. Notifying the payment processor to release authorization holds
-    // 3. Updating internal accounting systems
+    // Cancel the existing pre-authorization to release the hold
+    const paymentIntentId = loan.preAuthId;
     
+    logRelease("CANCELING_PREAUTH", {
+      requestId,
+      paymentIntentId,
+      preAuthAmount: loan.preAuthAmount
+    });
+
     try {
-      // Verify the customer and payment method still exist
-      const customer = await stripe.customers.retrieve(loan.customerId);
-      const paymentMethod = await stripe.paymentMethods.retrieve(loan.paymentMethodId);
+      // First, get the current PaymentIntent to check its status
+      const existingPaymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
       
-      logRelease("STRIPE_VERIFICATION_SUCCESS", {
+      logRelease("PREAUTH_STATUS_CHECK", {
         requestId,
-        customerId: customer.id,
-        paymentMethodId: paymentMethod.id,
-        note: "Customer and payment method verified for release",
+        paymentIntentId,
+        currentStatus: existingPaymentIntent.status,
+        amount: existingPaymentIntent.amount
       });
 
-      // Update loan in storage
-      loanStorage.updateLoan(loanId, {
-        status: "released",
-        releasedAt: new Date().toISOString(),
-      });
+      if (existingPaymentIntent.status === "requires_capture") {
+        // Cancel the pre-authorization to release the hold
+        const canceledPaymentIntent = await stripe.paymentIntents.cancel(paymentIntentId);
+        
+        logRelease("PREAUTH_CANCELED", {
+          requestId,
+          paymentIntentId: canceledPaymentIntent.id,
+          status: canceledPaymentIntent.status,
+          canceledAmount: existingPaymentIntent.amount
+        });
 
-      const response = {
-        success: true,
-        preAuthId: loan.preAuthId,
-        loanId,
-        reason: reason || "Manual release",
-        customerId: customer.id,
-        paymentMethodId: paymentMethod.id,
-        requestId,
-        note: "Pre-authorization hold released - customer can now use this credit capacity",
-      };
+        if (canceledPaymentIntent.status === "canceled") {
+          // Update loan in storage
+          loanStorage.updateLoan(loanId, {
+            status: "released",
+            releasedAt: new Date().toISOString(),
+            stripePreAuthStatus: "canceled"
+          });
 
-      logRelease("RELEASE_SUCCESS", { requestId, response });
-      return NextResponse.json(response);
+          const response = {
+            success: true,
+            preAuthId: loan.preAuthId,
+            loanId,
+            reason: reason || "Manual release",
+            releasedAmount: existingPaymentIntent.amount / 100, // Convert from cents
+            requestId,
+            stripeStatus: canceledPaymentIntent.status,
+            note: "Pre-authorization hold successfully released - funds available on customer's card",
+          };
+
+          logRelease("RELEASE_SUCCESS", { requestId, response });
+          return NextResponse.json(response);
+        } else {
+          const error = `Failed to cancel pre-authorization. Status: ${canceledPaymentIntent.status}`;
+          logRelease("CANCEL_FAILED", { requestId, status: canceledPaymentIntent.status }, true);
+          return NextResponse.json({ success: false, error }, { status: 400 });
+        }
+      } else if (existingPaymentIntent.status === "canceled") {
+        const error = "Pre-authorization is already canceled";
+        logRelease("ALREADY_CANCELED", { requestId, paymentIntentId }, true);
+        return NextResponse.json({ success: false, error }, { status: 400 });
+      } else if (existingPaymentIntent.status === "succeeded") {
+        const error = "Cannot release - pre-authorization has already been captured";
+        logRelease("ALREADY_CAPTURED", { requestId, paymentIntentId }, true);
+        return NextResponse.json({ success: false, error }, { status: 400 });
+      } else {
+        const error = `Cannot release pre-authorization. Current status: ${existingPaymentIntent.status}`;
+        logRelease("INVALID_STATUS_FOR_RELEASE", {
+          requestId,
+          paymentIntentId,
+          currentStatus: existingPaymentIntent.status
+        }, true);
+        return NextResponse.json({ success: false, error }, { status: 400 });
+      }
       
     } catch (stripeError: any) {
       // Even if Stripe verification fails, we can still mark the loan as released locally
@@ -216,7 +225,7 @@ export async function GET() {
       timestamp: new Date().toISOString(),
       requestId,
       loanStats: stats,
-      stripeConfigured: !!stripe,
+      stripeConfigured: !!process.env.STRIPE_SECRET_KEY,
     });
   } catch (error: any) {
     logRelease("HEALTH_CHECK_ERROR", { requestId, error: error.message }, true);

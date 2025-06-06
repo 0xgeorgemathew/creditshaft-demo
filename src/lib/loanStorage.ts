@@ -261,10 +261,27 @@ class LoanStorage {
 
     console.log("[LOAN-STORAGE] 🔍 === END STATE DEBUG ===");
   }
+
+  // Get debug info about storage state
+  getDebugInfo(): { totalLoans: number; allLoanIds: string[] } {
+    return {
+      totalLoans: this.loans.size,
+      allLoanIds: Array.from(this.loans.keys())
+    };
+  }
 }
 
-// Export singleton instance
-export const loanStorage = new LoanStorage();
+// Global singleton pattern for Next.js development mode
+declare global {
+  var __loanStorage: LoanStorage | undefined;
+}
+
+// Export singleton instance that persists across Next.js hot reloads
+export const loanStorage = globalThis.__loanStorage ?? new LoanStorage();
+
+if (process.env.NODE_ENV === 'development') {
+  globalThis.__loanStorage = loanStorage;
+}
 
 // Utility functions for loan management
 export const generateLoanId = (): string => {

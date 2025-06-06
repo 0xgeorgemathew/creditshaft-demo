@@ -1,37 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { loanStorage, generateLoanId } from "@/lib/loanStorage";
-import Stripe from "stripe";
+import { createLogger, generateRequestId } from "@/lib/logger";
+import { getStripeInstance } from "@/lib/stripe-server";
 
-// Enhanced logging utility
-const logBorrow = (event: string, data: any, isError: boolean = false) => {
-  const timestamp = new Date().toISOString();
-  const logLevel = isError ? "ERROR" : "INFO";
-  console.log(
-    `[${timestamp}] [BORROW-${logLevel}] ${event}:`,
-    JSON.stringify(data, null, 2)
-  );
-};
-
-// Initialize Stripe
-let stripe: Stripe | null = null;
-try {
-  if (process.env.STRIPE_SECRET_KEY) {
-    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-    logBorrow("STRIPE_INITIALIZED", { success: true });
-  } else {
-    logBorrow(
-      "STRIPE_INIT_ERROR",
-      { error: "STRIPE_SECRET_KEY not found" },
-      true
-    );
-  }
-} catch (error) {
-  logBorrow("STRIPE_INIT_ERROR", { error }, true);
-}
+const logBorrow = createLogger("BORROW");
 
 export async function POST(request: NextRequest) {
-  const requestId = Math.random().toString(36).substring(2, 11);
+  const requestId = generateRequestId();
   logBorrow("BORROW_REQUEST_START", { requestId });
 
   try {
@@ -41,6 +17,7 @@ export async function POST(request: NextRequest) {
       walletAddress,
       preAuthId,
       requiredPreAuth,
+      preAuthDurationDays,
       originalCreditLimit,
       customerId,
       paymentMethodId,
@@ -178,12 +155,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Use real Stripe API for production
-    if (!stripe) {
-      const error = "Stripe not properly configured";
-      logBorrow("STRIPE_NOT_CONFIGURED", { requestId }, true);
-      return NextResponse.json({ success: false, error }, { status: 500 });
-    }
-
     // Validate pre-auth data exists
     if (!customerId || !paymentMethodId) {
       const error = "Missing Stripe customer or payment method data";
@@ -195,6 +166,7 @@ export async function POST(request: NextRequest) {
 
     try {
       // Verify customer and payment method exist in Stripe
+      const stripe = getStripeInstance();
       const customer = await stripe.customers.retrieve(customerId);
       const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
       
@@ -211,13 +183,81 @@ export async function POST(request: NextRequest) {
       const ltvRatio = Math.round((borrowAmountNum / preAuthAmount) * 100);
       const interestRate = getInterestRate(asset);
 
+      logBorrow("CREATING_PREAUTH_HOLD", {
+        requestId,
+        borrowAmount: borrowAmountNum,
+        preAuthAmount,
+        ltvRatio
+      });
+
+      // Create PaymentIntent with manual capture for pre-authorization hold
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(preAuthAmount * 100), // Convert to cents
+        currency: "usd",
+        customer: customerId,
+        payment_method: paymentMethodId,
+        confirmation_method: "automatic",
+        capture_method: "manual", // This creates a hold without charging
+        confirm: true,
+        off_session: true, // Try off_session first for better UX
+        return_url: `${request.headers.get('origin') || 'http://localhost:3000'}/borrow-success`,
+        description: `CreditShaft pre-authorization - Loan ${loanId}`,
+        metadata: {
+          loan_id: loanId,
+          wallet_address: walletAddress,
+          borrow_amount: borrowAmountNum.toString(),
+          preauth_amount: preAuthAmount.toString(),
+          purpose: "credit_collateral_preauth",
+          request_id: requestId,
+        },
+      });
+
+      logBorrow("PREAUTH_PAYMENT_INTENT_CREATED", {
+        requestId,
+        paymentIntentId: paymentIntent.id,
+        status: paymentIntent.status,
+        amount: paymentIntent.amount,
+        captureMethod: paymentIntent.capture_method
+      });
+
+      if (paymentIntent.status === "requires_action") {
+        // Handle 3D Secure authentication requirement
+        logBorrow("PREAUTH_REQUIRES_ACTION", {
+          requestId,
+          paymentIntentId: paymentIntent.id,
+          clientSecret: paymentIntent.client_secret,
+          nextAction: paymentIntent.next_action
+        });
+        
+        return NextResponse.json({
+          success: false,
+          requires_action: true,
+          payment_intent_id: paymentIntent.id,
+          client_secret: paymentIntent.client_secret,
+          error: "Additional authentication required. Please complete 3D Secure verification."
+        }, { status: 200 });
+      } else if (paymentIntent.status !== "requires_capture") {
+        const error = `Pre-authorization failed. Status: ${paymentIntent.status}`;
+        logBorrow("PREAUTH_FAILED", {
+          requestId,
+          status: paymentIntent.status,
+          paymentIntentId: paymentIntent.id,
+        }, true);
+        return NextResponse.json({ success: false, error }, { status: 400 });
+      }
+
       // Create a mock transaction hash for demo blockchain integration
       const mockTxHash = "0x" + Math.random().toString(16).substring(2, 66);
+      
+      // Calculate pre-auth expiration based on user selection
+      const durationDays = preAuthDurationDays || 7; // Default 7 days
+      const preAuthCreatedAt = new Date().toISOString();
+      const preAuthExpiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
 
-      // Create complete loan record
+      // Create complete loan record with real pre-auth
       const loanData = {
         id: loanId,
-        preAuthId: preAuthId || setupIntentId || `stripe_${Date.now()}`,
+        preAuthId: paymentIntent.id, // Use PaymentIntent ID as pre-auth ID
         walletAddress,
         customerId,
         paymentMethodId,
@@ -237,9 +277,15 @@ export async function POST(request: NextRequest) {
 
         // Timestamps
         createdAt: new Date().toISOString(),
+        preAuthCreatedAt,
+        preAuthExpiresAt,
 
         // Transaction data (mock for demo)
         txHash: mockTxHash,
+        
+        // Stripe pre-auth tracking
+        stripePreAuthStatus: paymentIntent.status,
+        stripePreAuthAmount: preAuthAmount,
       };
 
       logBorrow("LOAN_DATA_CREATED", { requestId, loanData });
