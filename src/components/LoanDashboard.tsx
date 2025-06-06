@@ -43,18 +43,20 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
       const updateRealTimeData = () => {
         const now = new Date().getTime();
         const createdTime = new Date(loan.createdAt).getTime();
-        
+
         // Calculate precise time elapsed since loan creation in milliseconds
         const timeElapsedMs = now - createdTime;
         const timeElapsedSeconds = timeElapsedMs / 1000;
-        const timeElapsedDays = timeElapsedSeconds / (24 * 60 * 60);
-        
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const _timeElapsedDays = timeElapsedSeconds / (24 * 60 * 60);
+
         // Calculate real-time accrued interest with high precision
         const annualRate = loan.interestRate / 100;
         const secondlyRate = annualRate / (365 * 24 * 60 * 60); // Interest per second
-        const realTimeInterest = loan.borrowAmount * secondlyRate * timeElapsedSeconds;
+        const realTimeInterest =
+          loan.borrowAmount * secondlyRate * timeElapsedSeconds;
         setCurrentInterest(realTimeInterest);
-        
+
         // Update countdown timer if expiry date exists
         if (loan.preAuthExpiresAt) {
           const expiry = new Date(loan.preAuthExpiresAt).getTime();
@@ -62,8 +64,12 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
 
           if (timeDiff > 0) {
             const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-            const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+            const hours = Math.floor(
+              (timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+            );
+            const minutes = Math.floor(
+              (timeDiff % (1000 * 60 * 60)) / (1000 * 60)
+            );
             const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
 
             if (days > 0) {
@@ -75,15 +81,17 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
             } else {
               setTimeRemaining(`${seconds}s`);
             }
-            
+
             // Calculate progress as percentage of time REMAINING (countdown style)
             let progress = 0;
-            
+
             if (loan.preAuthCreatedAt) {
               // Use actual pre-auth creation time if available
-              const preAuthCreatedTime = new Date(loan.preAuthCreatedAt).getTime();
+              const preAuthCreatedTime = new Date(
+                loan.preAuthCreatedAt
+              ).getTime();
               const totalDuration = expiry - preAuthCreatedTime;
-              
+
               if (totalDuration > 0 && timeDiff > 0) {
                 progress = (timeDiff / totalDuration) * 100;
               }
@@ -91,7 +99,7 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
               // Fallback: use loan creation time
               const loanCreatedTime = new Date(loan.createdAt).getTime();
               const totalDuration = expiry - loanCreatedTime;
-              
+
               if (totalDuration > 0 && timeDiff > 0) {
                 progress = (timeDiff / totalDuration) * 100;
               } else {
@@ -102,7 +110,7 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
                 }
               }
             }
-            
+
             // Ensure progress is within valid range and never exactly 100% unless expired
             if (timeDiff > 0) {
               // If there's still time remaining, ensure progress is reasonable
@@ -113,14 +121,14 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
                   // 30-day loan with >25 days remaining
                   progress = (timeDiff / (30 * 24 * 60 * 60 * 1000)) * 100;
                 } else if (daysDiff > 5) {
-                  // 7-day loan with >5 days remaining  
+                  // 7-day loan with >5 days remaining
                   progress = (timeDiff / (7 * 24 * 60 * 60 * 1000)) * 100;
                 } else {
                   // Use actual remaining time percentage
                   progress = Math.max((daysDiff / 30) * 100, 0.01); // Minimum 0.01%
                 }
               }
-              
+
               // Cap at 99.99% to ensure visibility
               const finalProgress = Math.max(Math.min(progress, 99.99), 0.01);
               setProgressPercentage(finalProgress);
@@ -128,7 +136,7 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
               // Only show 100% when actually expired
               setProgressPercentage(100);
             }
-            
+
             // Animation trigger for smooth updates
           } else {
             setTimeRemaining("EXPIRED");
@@ -139,13 +147,19 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
 
       // Update immediately
       updateRealTimeData();
-      
+
       // Update every 100ms for ultra-smooth progress bar
       const interval = setInterval(updateRealTimeData, 100);
-      
+
       return () => clearInterval(interval);
     }
-  }, [loan.status, loan.preAuthExpiresAt, loan.createdAt, loan.borrowAmount, loan.interestRate]);
+  }, [
+    loan.status,
+    loan.preAuthExpiresAt,
+    loan.createdAt,
+    loan.borrowAmount,
+    loan.interestRate,
+  ]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -255,7 +269,8 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
               </p>
             </div>
             <p className="text-yellow-200 text-xs mt-1">
-              Daily: ${dailyInterest.toFixed(4)} | Rate: {loan.interestRate}% APY
+              Daily: ${dailyInterest.toFixed(4)} | Rate: {loan.interestRate}%
+              APY
             </p>
           </div>
 
@@ -266,7 +281,10 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
                 {/* Dynamic Circular Progress Credit Card Icon */}
                 <div className="relative flex flex-col items-center">
                   {/* Main circular progress */}
-                  <svg className="w-24 h-24 transform -rotate-90 relative z-10" viewBox="0 0 96 96">
+                  <svg
+                    className="w-24 h-24 transform -rotate-90 relative z-10"
+                    viewBox="0 0 96 96"
+                  >
                     {/* Background circle - light gray for full circle */}
                     <circle
                       cx="48"
@@ -276,7 +294,7 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
                       strokeWidth="6"
                       fill="none"
                     />
-                    
+
                     {/* Progress circle - shows countdown remaining time */}
                     <circle
                       cx="48"
@@ -289,24 +307,50 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
                       className="transition-all duration-100 ease-linear"
                       style={{
                         strokeDasharray: `${2 * Math.PI * 40}`,
-                        strokeDashoffset: `${2 * Math.PI * 40 * (1 - progressPercentage / 100)}`
+                        strokeDashoffset: `${
+                          2 * Math.PI * 40 * (1 - progressPercentage / 100)
+                        }`,
                       }}
                     />
-                    
+
                     {/* Animated tip at the current progress point - always visible when not expired */}
                     {timeRemaining !== "EXPIRED" && (
                       <circle
-                        cx={48 + 40 * Math.cos((progressPercentage * 3.6 - 90) * Math.PI / 180)}
-                        cy={48 + 40 * Math.sin((progressPercentage * 3.6 - 90) * Math.PI / 180)}
+                        cx={
+                          48 +
+                          40 *
+                            Math.cos(
+                              ((progressPercentage * 3.6 - 90) * Math.PI) / 180
+                            )
+                        }
+                        cy={
+                          48 +
+                          40 *
+                            Math.sin(
+                              ((progressPercentage * 3.6 - 90) * Math.PI) / 180
+                            )
+                        }
                         r="3"
-                        fill={progressPercentage < 20 ? "#ef4444" : progressPercentage < 50 ? "#fbbf24" : "#22c55e"}
+                        fill={
+                          progressPercentage < 20
+                            ? "#ef4444"
+                            : progressPercentage < 50
+                            ? "#fbbf24"
+                            : "#22c55e"
+                        }
                         className="animate-pulse"
                       />
                     )}
-                    
+
                     {/* Dynamic gradient based on time remaining */}
                     <defs>
-                      <linearGradient id="countdownGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <linearGradient
+                        id="countdownGradient"
+                        x1="0%"
+                        y1="0%"
+                        x2="100%"
+                        y2="100%"
+                      >
                         {progressPercentage < 20 ? (
                           // Red gradient for critical time
                           <>
@@ -332,7 +376,7 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
                       </linearGradient>
                     </defs>
                   </svg>
-                  
+
                   {/* Credit Card Icon - perfectly centered */}
                   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
                     {timeRemaining === "EXPIRED" ? (
@@ -342,24 +386,31 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
                         {/* EMV Chip */}
                         <div className="absolute top-0.5 left-0.5 w-1 h-0.5 bg-yellow-300 rounded-sm"></div>
                         {/* Card number */}
-                        <div className="absolute bottom-0 right-0.5 text-white text-xs font-mono">••••</div>
+                        <div className="absolute bottom-0 right-0.5 text-white text-xs font-mono">
+                          ••••
+                        </div>
                       </div>
                     )}
                   </div>
 
                   {/* Progress percentage display */}
-                  <div className={`mt-3 text-xs font-mono font-bold transition-colors duration-300 ${
-                    progressPercentage < 20 ? 'text-red-300' :
-                    progressPercentage < 50 ? 'text-yellow-300' : 'text-green-300'
-                  }`}>
-                    {progressPercentage < 1 && progressPercentage > 0 
+                  <div
+                    className={`mt-3 text-xs font-mono font-bold transition-colors duration-300 ${
+                      progressPercentage < 20
+                        ? "text-red-300"
+                        : progressPercentage < 50
+                        ? "text-yellow-300"
+                        : "text-green-300"
+                    }`}
+                  >
+                    {progressPercentage < 1 && progressPercentage > 0
                       ? progressPercentage.toFixed(3)
-                      : progressPercentage < 10 
-                        ? progressPercentage.toFixed(2)
-                        : progressPercentage >= 99
-                          ? progressPercentage.toFixed(2)
-                          : progressPercentage.toFixed(1)
-                    }%
+                      : progressPercentage < 10
+                      ? progressPercentage.toFixed(2)
+                      : progressPercentage >= 99
+                      ? progressPercentage.toFixed(2)
+                      : progressPercentage.toFixed(1)}
+                    %
                   </div>
                 </div>
 
@@ -370,18 +421,23 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
                       Time Remaining
                     </span>
                   </div>
-                  
+
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-blue-200 text-sm">Until auto-charge:</span>
+                      <span className="text-blue-200 text-sm">
+                        Until auto-charge:
+                      </span>
                       <span className="text-blue-100 font-mono text-lg font-semibold">
-                        {timeRemaining === "EXPIRED" ? "EXPIRED" : timeRemaining}
+                        {timeRemaining === "EXPIRED"
+                          ? "EXPIRED"
+                          : timeRemaining}
                       </span>
                     </div>
-                    
+
                     <div className="glassmorphism rounded-lg p-3 border border-white/10 bg-white/5">
                       <p className="text-blue-200 text-xs leading-relaxed">
-                        💳 Your credit card will be charged automatically before expiry. Repay early to cancel.
+                        💳 Your credit card will be charged automatically before
+                        expiry. Repay early to cancel.
                       </p>
                     </div>
                   </div>

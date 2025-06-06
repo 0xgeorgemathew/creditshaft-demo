@@ -22,9 +22,9 @@ export default function Home() {
   const [preAuthData, setPreAuthData] = useState<PreAuthData | null>(null);
   const [showBorrowing, setShowBorrowing] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "borrow" | "manage" | "setup">(
-    "overview"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "borrow" | "manage" | "setup"
+  >("overview");
   const [sessionStorage, setSessionStorage] = useState<{ [key: string]: any }>(
     {}
   );
@@ -67,15 +67,23 @@ export default function Home() {
   // Check for active loans
   const checkActiveLoans = async () => {
     if (!address) return;
-    
+
     try {
-      const response = await fetch(`/api/loans?wallet=${encodeURIComponent(address)}`);
+      const response = await fetch(
+        `/api/loans?wallet=${encodeURIComponent(address)}`
+      );
       const data = await response.json();
-      
+
       if (data.success && data.loans) {
-        const activeLoans = data.loans.filter((loan: Loan) => loan.status === "active");
+        const activeLoans = data.loans.filter(
+          (loan: Loan) => loan.status === "active"
+        );
         setHasActiveLoans(activeLoans.length > 0);
-        console.log("🔍 Active loans check:", activeLoans.length, "active loans found");
+        console.log(
+          "🔍 Active loans check:",
+          activeLoans.length,
+          "active loans found"
+        );
       }
     } catch (error) {
       console.error("❌ Failed to check active loans:", error);
@@ -104,7 +112,7 @@ export default function Home() {
       } else {
         console.log("🆕 No saved preAuth data found for", address);
       }
-      
+
       // Check for active loans whenever wallet connects
       checkActiveLoans();
     }
@@ -205,7 +213,7 @@ export default function Home() {
     setActiveTab("manage");
     console.log("Set activeTab to 'manage'");
     console.log("Redirecting to manage loans tab after successful borrow");
-    
+
     // Check for active loans after successful borrow
     checkActiveLoans();
   };
@@ -334,7 +342,6 @@ export default function Home() {
             </div>
           )}
 
-
           {/* Step 2: Main Interface (always show when connected) */}
           {isConnected && address && (
             <div className="transform transition-all duration-500 animate-fade-in">
@@ -349,25 +356,40 @@ export default function Home() {
                       Welcome to CreditShaft! 👋
                     </h2>
                     <p className="text-gray-300 text-lg mb-6 max-w-2xl mx-auto">
-                      To start borrowing crypto against your credit card, you'll need to set up a secure pre-authorization. 
-                      This allows us to hold funds on your card without charging until needed.
+                      To start borrowing crypto against your credit card,
+                      you&apos;ll need to set up a secure pre-authorization.
+                      This allows us to hold funds on your card without charging
+                      until needed.
                     </p>
-                    
+
                     <div className="grid md:grid-cols-3 gap-6 mb-8">
                       <div className="bg-white/5 rounded-xl p-4">
                         <div className="text-2xl mb-2">🔒</div>
-                        <h3 className="font-semibold text-white mb-2">Secure Setup</h3>
-                        <p className="text-gray-300 text-sm">Your card info is encrypted and never stored on our servers</p>
+                        <h3 className="font-semibold text-white mb-2">
+                          Secure Setup
+                        </h3>
+                        <p className="text-gray-300 text-sm">
+                          Your card info is encrypted and never stored on our
+                          servers
+                        </p>
                       </div>
                       <div className="bg-white/5 rounded-xl p-4">
                         <div className="text-2xl mb-2">⚡</div>
-                        <h3 className="font-semibold text-white mb-2">Instant Loans</h3>
-                        <p className="text-gray-300 text-sm">Borrow crypto instantly with up to 80% LTV ratio</p>
+                        <h3 className="font-semibold text-white mb-2">
+                          Instant Loans
+                        </h3>
+                        <p className="text-gray-300 text-sm">
+                          Borrow crypto instantly with up to 80% LTV ratio
+                        </p>
                       </div>
                       <div className="bg-white/5 rounded-xl p-4">
                         <div className="text-2xl mb-2">💳</div>
-                        <h3 className="font-semibold text-white mb-2">No Charges</h3>
-                        <p className="text-gray-300 text-sm">Only charged if you don't repay by expiry date</p>
+                        <h3 className="font-semibold text-white mb-2">
+                          No Charges
+                        </h3>
+                        <p className="text-gray-300 text-sm">
+                          Only charged if you don&apos;t repay by expiry date
+                        </p>
                       </div>
                     </div>
 

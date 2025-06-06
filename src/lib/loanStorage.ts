@@ -1,3 +1,4 @@
+/* eslint-disable no-var */
 // src/lib/loanStorage.ts
 import { Loan, CreditSummary, PreAuthData } from "@/types";
 
@@ -211,12 +212,18 @@ class LoanStorage {
   // Pre-auth data management
   storePreAuthData(walletAddress: string, preAuth: PreAuthData): void {
     this.preAuthData.set(walletAddress, preAuth);
-    console.log(`[LOAN-STORAGE] 💳 Stored pre-auth data for wallet ${walletAddress}`);
+    console.log(
+      `[LOAN-STORAGE] 💳 Stored pre-auth data for wallet ${walletAddress}`
+    );
   }
 
   getPreAuthData(walletAddress: string): PreAuthData | undefined {
     const preAuth = this.preAuthData.get(walletAddress);
-    console.log(`[LOAN-STORAGE] 🔍 Getting pre-auth for wallet ${walletAddress}: ${preAuth ? "found" : "not found"}`);
+    console.log(
+      `[LOAN-STORAGE] 🔍 Getting pre-auth for wallet ${walletAddress}: ${
+        preAuth ? "found" : "not found"
+      }`
+    );
     return preAuth;
   }
 
@@ -266,7 +273,7 @@ class LoanStorage {
   getDebugInfo(): { totalLoans: number; allLoanIds: string[] } {
     return {
       totalLoans: this.loans.size,
-      allLoanIds: Array.from(this.loans.keys())
+      allLoanIds: Array.from(this.loans.keys()),
     };
   }
 }
@@ -279,7 +286,7 @@ declare global {
 // Export singleton instance that persists across Next.js hot reloads
 export const loanStorage = globalThis.__loanStorage ?? new LoanStorage();
 
-if (process.env.NODE_ENV === 'development') {
+if (process.env.NODE_ENV === "development") {
   globalThis.__loanStorage = loanStorage;
 }
 
