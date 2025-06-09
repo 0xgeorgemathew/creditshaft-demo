@@ -40,21 +40,20 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
   // Calculate real-time countdown and interest
   useEffect(() => {
     if (loan.status === "active") {
+      // Pre-calculate constants to avoid repeated calculations
+      const annualRate = loan.interestRate / 100;
+      const secondlyRate = annualRate / (365 * 24 * 60 * 60);
+      const createdTime = new Date(loan.createdAt).getTime();
+      
       const updateRealTimeData = () => {
         const now = new Date().getTime();
-        const createdTime = new Date(loan.createdAt).getTime();
 
         // Calculate precise time elapsed since loan creation in milliseconds
         const timeElapsedMs = now - createdTime;
         const timeElapsedSeconds = timeElapsedMs / 1000;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const _timeElapsedDays = timeElapsedSeconds / (24 * 60 * 60);
 
-        // Calculate real-time accrued interest with high precision
-        const annualRate = loan.interestRate / 100;
-        const secondlyRate = annualRate / (365 * 24 * 60 * 60); // Interest per second
-        const realTimeInterest =
-          loan.borrowAmount * secondlyRate * timeElapsedSeconds;
+        // Calculate real-time accrued interest with pre-calculated rate
+        const realTimeInterest = loan.borrowAmount * secondlyRate * timeElapsedSeconds;
         setCurrentInterest(realTimeInterest);
 
         // Update countdown timer if expiry date exists
@@ -82,60 +81,22 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
               setTimeRemaining(`${seconds}s`);
             }
 
-            // Calculate progress as percentage of time REMAINING (countdown style)
+            // Simplified progress calculation as percentage of time REMAINING
             let progress = 0;
+            const startTime = loan.preAuthCreatedAt 
+              ? new Date(loan.preAuthCreatedAt).getTime()
+              : createdTime;
+            const totalDuration = expiry - startTime;
 
-            if (loan.preAuthCreatedAt) {
-              // Use actual pre-auth creation time if available
-              const preAuthCreatedTime = new Date(
-                loan.preAuthCreatedAt
-              ).getTime();
-              const totalDuration = expiry - preAuthCreatedTime;
-
-              if (totalDuration > 0 && timeDiff > 0) {
-                progress = (timeDiff / totalDuration) * 100;
-              }
-            } else {
-              // Fallback: use loan creation time
-              const loanCreatedTime = new Date(loan.createdAt).getTime();
-              const totalDuration = expiry - loanCreatedTime;
-
-              if (totalDuration > 0 && timeDiff > 0) {
-                progress = (timeDiff / totalDuration) * 100;
-              } else {
-                // Final fallback: For 30-day loan, use appropriate duration
-                const estimatedTotalDuration = 30 * 24 * 60 * 60 * 1000; // 30 days in ms
-                if (timeDiff > 0) {
-                  progress = (timeDiff / estimatedTotalDuration) * 100;
-                }
-              }
+            if (totalDuration > 0 && timeDiff > 0) {
+              progress = (timeDiff / totalDuration) * 100;
+              // Ensure progress is within valid range (0.01% to 99.99%)
+              progress = Math.max(Math.min(progress, 99.99), 0.01);
+            } else if (timeDiff <= 0) {
+              progress = 100; // Expired
             }
 
-            // Ensure progress is within valid range and never exactly 100% unless expired
-            if (timeDiff > 0) {
-              // If there's still time remaining, ensure progress is reasonable
-              if (progress <= 0 || progress >= 100) {
-                // Fallback calculation for very new loans (showing almost full time remaining)
-                const daysDiff = timeDiff / (24 * 60 * 60 * 1000);
-                if (daysDiff > 25) {
-                  // 30-day loan with >25 days remaining
-                  progress = (timeDiff / (30 * 24 * 60 * 60 * 1000)) * 100;
-                } else if (daysDiff > 5) {
-                  // 7-day loan with >5 days remaining
-                  progress = (timeDiff / (7 * 24 * 60 * 60 * 1000)) * 100;
-                } else {
-                  // Use actual remaining time percentage
-                  progress = Math.max((daysDiff / 30) * 100, 0.01); // Minimum 0.01%
-                }
-              }
-
-              // Cap at 99.99% to ensure visibility
-              const finalProgress = Math.max(Math.min(progress, 99.99), 0.01);
-              setProgressPercentage(finalProgress);
-            } else {
-              // Only show 100% when actually expired
-              setProgressPercentage(100);
-            }
+            setProgressPercentage(progress);
 
             // Animation trigger for smooth updates
           } else {
@@ -148,8 +109,8 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
       // Update immediately
       updateRealTimeData();
 
-      // Update every 100ms for ultra-smooth progress bar
-      const interval = setInterval(updateRealTimeData, 100);
+      // Update every 1000ms (1 second) for better performance
+      const interval = setInterval(updateRealTimeData, 1000);
 
       return () => clearInterval(interval);
     }
