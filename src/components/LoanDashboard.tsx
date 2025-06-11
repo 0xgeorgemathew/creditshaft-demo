@@ -17,6 +17,7 @@ import {
   Zap,
   Shield,
   RefreshCw,
+  X,
 } from "lucide-react";
 
 interface LoanDashboardProps {
@@ -28,6 +29,84 @@ interface LoanCardProps {
   onCharge: (loanId: string) => void;
   onRelease: (loanId: string) => void;
   isProcessing: boolean;
+}
+
+interface ToastNotification {
+  id: string;
+  type: 'success' | 'error' | 'info';
+  title: string;
+  message: string;
+}
+
+interface ToastProps {
+  toast: ToastNotification;
+  onClose: (id: string) => void;
+}
+
+// Toast component
+function Toast({ toast, onClose }: ToastProps) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose(toast.id);
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [toast.id, onClose]);
+
+  const getToastStyles = (type: string) => {
+    switch (type) {
+      case 'success':
+        return 'border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 to-green-500/10 text-emerald-200';
+      case 'error':
+        return 'border-rose-500/30 bg-gradient-to-r from-rose-500/10 to-red-500/10 text-rose-200';
+      case 'info':
+        return 'border-blue-500/30 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 text-blue-200';
+      default:
+        return 'border-gray-500/30 bg-gradient-to-r from-gray-500/10 to-slate-500/10 text-gray-200';
+    }
+  };
+
+  const getIcon = (type: string) => {
+    switch (type) {
+      case 'success':
+        return <CheckCircle size={20} className="text-emerald-300" />;
+      case 'error':
+        return <XCircle size={20} className="text-rose-300" />;
+      case 'info':
+        return <AlertCircle size={20} className="text-blue-300" />;
+      default:
+        return <AlertCircle size={20} className="text-gray-300" />;
+    }
+  };
+
+  return (
+    <div className={`glassmorphism rounded-xl p-4 border ${getToastStyles(toast.type)} transform transition-all duration-300 animate-slide-in shadow-xl`}>
+      <div className="flex items-start gap-3">
+        {getIcon(toast.type)}
+        <div className="flex-1">
+          <h4 className="font-semibold text-white text-sm mb-1">{toast.title}</h4>
+          <p className="text-xs leading-relaxed">{toast.message}</p>
+        </div>
+        <button
+          onClick={() => onClose(toast.id)}
+          className="text-gray-400 hover:text-white transition-colors p-1 hover:bg-white/10 rounded"
+        >
+          <X size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Toast container component
+function ToastContainer({ toasts, onClose }: { toasts: ToastNotification[]; onClose: (id: string) => void }) {
+  return (
+    <div className="fixed top-4 right-4 z-50 space-y-3 max-w-md">
+      {toasts.map((toast) => (
+        <Toast key={toast.id} toast={toast} onClose={onClose} />
+      ))}
+    </div>
+  );
 }
 
 // Individual loan card component
@@ -125,13 +204,13 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
-        return "text-green-400 bg-green-500/10 border-green-500/30";
+        return "text-emerald-300 bg-gradient-to-r from-emerald-500/10 to-green-500/10 border-emerald-500/20 glassmorphism";
       case "charged":
-        return "text-red-400 bg-red-500/10 border-red-500/30";
+        return "text-rose-300 bg-gradient-to-r from-rose-500/10 to-red-500/10 border-rose-500/20 glassmorphism";
       case "released":
-        return "text-blue-400 bg-blue-500/10 border-blue-500/30";
+        return "text-cyan-300 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border-cyan-500/20 glassmorphism";
       default:
-        return "text-gray-400 bg-gray-500/10 border-gray-500/30";
+        return "text-slate-300 bg-gradient-to-r from-slate-500/10 to-gray-500/10 border-slate-500/20 glassmorphism";
     }
   };
 
@@ -214,22 +293,22 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
 
       {loan.status === "active" && (
         <>
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-4">
+          <div className="glassmorphism rounded-lg p-3 mb-4 border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-orange-500/10">
             <div className="flex items-center gap-2 mb-2">
-              <TrendingUp size={14} className="text-yellow-400 animate-pulse" />
-              <span className="text-yellow-300 text-sm font-semibold">
+              <TrendingUp size={14} className="text-amber-300 animate-pulse" />
+              <span className="text-amber-200 text-sm font-semibold">
                 Interest Accrued (Real-Time)
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <p className="text-yellow-100 text-lg font-mono">
+              <p className="text-white text-lg font-mono">
                 ${currentInterest.toFixed(6)}
               </p>
-              <p className="text-yellow-200 text-xs">
+              <p className="text-amber-200 text-xs">
                 +${secondlyInterest.toFixed(8)}/sec
               </p>
             </div>
-            <p className="text-yellow-200 text-xs mt-1">
+            <p className="text-amber-200 text-xs mt-1">
               Daily: ${dailyInterest.toFixed(4)} | Rate: {loan.interestRate}%
               APY
             </p>
@@ -294,10 +373,10 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
                         r="3"
                         fill={
                           progressPercentage < 20
-                            ? "#ef4444"
+                            ? "rgba(244, 63, 94, 0.8)"
                             : progressPercentage < 50
-                            ? "#fbbf24"
-                            : "#22c55e"
+                            ? "rgba(251, 191, 36, 0.8)"
+                            : "rgba(52, 211, 153, 0.8)"
                         }
                         className="animate-pulse"
                       />
@@ -313,25 +392,25 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
                         y2="100%"
                       >
                         {progressPercentage < 20 ? (
-                          // Red gradient for critical time
+                          // Rose gradient for critical time
                           <>
-                            <stop offset="0%" stopColor="#ef4444" />
-                            <stop offset="50%" stopColor="#dc2626" />
-                            <stop offset="100%" stopColor="#b91c1c" />
+                            <stop offset="0%" stopColor="rgba(244, 63, 94, 0.8)" />
+                            <stop offset="50%" stopColor="rgba(225, 29, 72, 0.6)" />
+                            <stop offset="100%" stopColor="rgba(190, 18, 60, 0.4)" />
                           </>
                         ) : progressPercentage < 50 ? (
-                          // Yellow gradient for medium time
+                          // Amber gradient for medium time
                           <>
-                            <stop offset="0%" stopColor="#fbbf24" />
-                            <stop offset="50%" stopColor="#f59e0b" />
-                            <stop offset="100%" stopColor="#d97706" />
+                            <stop offset="0%" stopColor="rgba(251, 191, 36, 0.8)" />
+                            <stop offset="50%" stopColor="rgba(245, 158, 11, 0.6)" />
+                            <stop offset="100%" stopColor="rgba(217, 119, 6, 0.4)" />
                           </>
                         ) : (
-                          // Green gradient for plenty of time
+                          // Emerald gradient for plenty of time
                           <>
-                            <stop offset="0%" stopColor="#22c55e" />
-                            <stop offset="50%" stopColor="#16a34a" />
-                            <stop offset="100%" stopColor="#15803d" />
+                            <stop offset="0%" stopColor="rgba(52, 211, 153, 0.8)" />
+                            <stop offset="50%" stopColor="rgba(16, 185, 129, 0.6)" />
+                            <stop offset="100%" stopColor="rgba(5, 150, 105, 0.4)" />
                           </>
                         )}
                       </linearGradient>
@@ -358,10 +437,10 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
                   <div
                     className={`mt-3 text-xs font-mono font-bold transition-colors duration-300 ${
                       progressPercentage < 20
-                        ? "text-red-300"
+                        ? "text-rose-300"
                         : progressPercentage < 50
-                        ? "text-yellow-300"
-                        : "text-green-300"
+                        ? "text-amber-300"
+                        : "text-emerald-300"
                     }`}
                   >
                     {progressPercentage < 1 && progressPercentage > 0
@@ -483,7 +562,7 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
           <button
             onClick={() => onCharge(loan.id)}
             disabled={isProcessing}
-            className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white py-3 px-4 rounded-lg font-semibold disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+            className="flex-1 glassmorphism border border-red-500/30 bg-gradient-to-r from-red-500/10 to-red-600/10 hover:from-red-500/20 hover:to-red-600/20 text-red-300 hover:text-red-200 py-3 px-4 rounded-lg font-semibold disabled:opacity-50 transition-all flex items-center justify-center gap-2"
           >
             {isProcessing ? (
               <Loader className="animate-spin" size={16} />
@@ -495,7 +574,7 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
           <button
             onClick={() => onRelease(loan.id)}
             disabled={isProcessing}
-            className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white py-3 px-4 rounded-lg font-semibold disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+            className="flex-1 glassmorphism border border-green-500/30 bg-gradient-to-r from-green-500/10 to-green-600/10 hover:from-green-500/20 hover:to-green-600/20 text-green-300 hover:text-green-200 py-3 px-4 rounded-lg font-semibold disabled:opacity-50 transition-all flex items-center justify-center gap-2"
           >
             {isProcessing ? (
               <Loader className="animate-spin" size={16} />
@@ -542,29 +621,29 @@ function CreditSummaryCard({
       </h3>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-r from-blue-500/10 to-blue-600/10 border border-blue-500/30 rounded-lg p-4">
-          <p className="text-blue-300 text-sm mb-1">Total Credit</p>
+        <div className="glassmorphism rounded-lg p-4 border border-sky-500/20 bg-gradient-to-br from-sky-500/10 to-blue-500/10">
+          <p className="text-sky-300 text-sm mb-1">Total Credit</p>
           <p className="text-white text-lg font-bold">
             ${summary.totalCreditLimit.toLocaleString()}
           </p>
         </div>
 
-        <div className="bg-gradient-to-r from-green-500/10 to-green-600/10 border border-green-500/30 rounded-lg p-4">
-          <p className="text-green-300 text-sm mb-1">Available</p>
+        <div className="glassmorphism rounded-lg p-4 border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-green-500/10">
+          <p className="text-emerald-300 text-sm mb-1">Available</p>
           <p className="text-white text-lg font-bold">
             ${summary.availableCredit.toLocaleString()}
           </p>
         </div>
 
-        <div className="bg-gradient-to-r from-purple-500/10 to-purple-600/10 border border-purple-500/30 rounded-lg p-4">
-          <p className="text-purple-300 text-sm mb-1">Active Borrowed</p>
+        <div className="glassmorphism rounded-lg p-4 border border-violet-500/20 bg-gradient-to-br from-violet-500/10 to-purple-500/10">
+          <p className="text-violet-300 text-sm mb-1">Active Borrowed</p>
           <p className="text-white text-lg font-bold">
             ${summary.totalBorrowed.toLocaleString()}
           </p>
         </div>
 
-        <div className="bg-gradient-to-r from-red-500/10 to-red-600/10 border border-red-500/30 rounded-lg p-4">
-          <p className="text-red-300 text-sm mb-1">Utilization</p>
+        <div className="glassmorphism rounded-lg p-4 border border-rose-500/20 bg-gradient-to-br from-rose-500/10 to-pink-500/10">
+          <p className="text-rose-300 text-sm mb-1">Utilization</p>
           <p className="text-white text-lg font-bold">
             {summary.utilizationPercentage.toFixed(1)}%
           </p>
@@ -594,6 +673,18 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [processingLoanId, setProcessingLoanId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [toasts, setToasts] = useState<ToastNotification[]>([]);
+
+  // Toast management functions
+  const addToast = (type: 'success' | 'error' | 'info', title: string, message: string) => {
+    const id = Date.now().toString();
+    const newToast: ToastNotification = { id, type, title, message };
+    setToasts(prev => [...prev, newToast]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
 
   const fetchLoans = async () => {
     try {
@@ -619,14 +710,8 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
   };
 
   const handleCharge = async (loanId: string) => {
-    if (
-      !confirm(
-        "Are you sure you want to charge this loan? This will capture the pre-authorization on the credit card."
-      )
-    ) {
-      return;
-    }
-
+    addToast('info', 'Processing...', 'Charging loan and capturing pre-authorization on credit card.');
+    
     setProcessingLoanId(loanId);
     try {
       const response = await fetch("/api/loans/charge", {
@@ -641,27 +726,21 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
       const data = await response.json();
 
       if (data.success) {
-        alert(`Loan charged successfully! Charge ID: ${data.chargeId}`);
+        addToast('success', 'Loan Charged Successfully!', `Charge ID: ${data.chargeId}. Pre-authorization has been captured.`);
         await fetchLoans(); // Refresh data
       } else {
-        alert(`Charge failed: ${data.error}`);
+        addToast('error', 'Charge Failed', data.error || 'Failed to charge the loan. Please try again.');
       }
     } catch {
-      alert("Network error during charge operation");
+      addToast('error', 'Network Error', 'Unable to process charge operation. Check your connection and try again.');
     } finally {
       setProcessingLoanId(null);
     }
   };
 
   const handleRelease = async (loanId: string) => {
-    if (
-      !confirm(
-        "Are you sure you want to release this loan? This will cancel the pre-authorization hold."
-      )
-    ) {
-      return;
-    }
-
+    addToast('info', 'Processing...', 'Releasing loan and canceling pre-authorization hold.');
+    
     setProcessingLoanId(loanId);
     try {
       const response = await fetch("/api/loans/release", {
@@ -676,13 +755,13 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
       const data = await response.json();
 
       if (data.success) {
-        alert("Loan released successfully!");
+        addToast('success', 'Loan Released Successfully!', 'Pre-authorization hold has been canceled. No charges will occur.');
         await fetchLoans(); // Refresh data
       } else {
-        alert(`Release failed: ${data.error}`);
+        addToast('error', 'Release Failed', data.error || 'Failed to release the loan. Please try again.');
       }
     } catch {
-      alert("Network error during release operation");
+      addToast('error', 'Network Error', 'Unable to process release operation. Check your connection and try again.');
     } finally {
       setProcessingLoanId(null);
     }
@@ -706,7 +785,9 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      <ToastContainer toasts={toasts} onClose={removeToast} />
+      <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold gradient-text">Loan Management</h2>
         <button
@@ -720,9 +801,9 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center gap-3">
-          <AlertCircle className="text-red-400" size={20} />
-          <span className="text-red-300">{error}</span>
+        <div className="glassmorphism rounded-xl p-4 border border-rose-500/20 bg-gradient-to-r from-rose-500/10 to-red-500/10 flex items-center gap-3">
+          <AlertCircle className="text-rose-300" size={20} />
+          <span className="text-rose-200">{error}</span>
         </div>
       )}
 
@@ -754,6 +835,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

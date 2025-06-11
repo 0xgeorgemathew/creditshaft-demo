@@ -219,19 +219,19 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden flex flex-col">
       {/* Animated background elements */}
-      <div className="absolute inset-0 opacity-30">
-        <div className="absolute top-20 left-20 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl animate-pulse"></div>
-        <div className="absolute top-40 right-20 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl animate-pulse animation-delay-2000"></div>
-        <div className="absolute bottom-20 left-40 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl animate-pulse animation-delay-4000"></div>
+      <div className="absolute inset-0 opacity-40">
+        <div className="absolute top-20 left-20 w-72 h-72 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full mix-blend-multiply filter blur-2xl float-dynamic-1 shadow-2xl"></div>
+        <div className="absolute top-40 right-20 w-72 h-72 bg-gradient-to-r from-purple-400 to-purple-600 rounded-full mix-blend-multiply filter blur-2xl float-dynamic-2 shadow-2xl"></div>
+        <div className="absolute bottom-20 left-40 w-72 h-72 bg-gradient-to-r from-pink-400 to-pink-600 rounded-full mix-blend-multiply filter blur-2xl float-dynamic-3 shadow-2xl"></div>
       </div>
 
       {/* Header */}
       <header className="relative z-10 border-b border-white/10 backdrop-blur-lg bg-white/5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 max-w-7xl">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg glow-blue">
                   <Zap className="text-white" size={24} />
@@ -245,19 +245,20 @@ export default function Home() {
                 Chromion Hackathon Demo
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              {isConnected && <WalletAddress />}
-              {isConnected && (
-                <div className="relative" style={{ zIndex: 10000 }}>
+            
+            {isConnected && (
+              <div className="flex items-center gap-4">
+                <WalletAddress />
+                <div className="relative">
                   <NetworkSwitcher />
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </header>
 
-      <main className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <main className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 flex-1">
         {/* Hero Section - Only show when no wallet connected */}
         {!isConnected && (
           <div className="text-center mb-16">
@@ -551,7 +552,7 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-white/10 mt-20 backdrop-blur-lg bg-white/5">
+      <footer className="relative z-10 border-t border-white/10 mt-auto backdrop-blur-lg bg-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-4">

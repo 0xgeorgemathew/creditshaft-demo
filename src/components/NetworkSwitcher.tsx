@@ -3,7 +3,7 @@
 import { useChainId, useSwitchChain } from "wagmi";
 import { sepolia } from "viem/chains";
 import { avalancheFuji } from "@/config/web3";
-import { ChevronDown, Wifi } from "lucide-react";
+import { ChevronDown, Link } from "lucide-react";
 import { useState } from "react";
 
 const networks = [
@@ -49,7 +49,7 @@ export default function NetworkSwitcher() {
             currentNetwork?.color || "from-gray-500 to-gray-600"
           }`}
         ></div>
-        <Wifi size={14} />
+        <Link size={14} />
         <span className="text-sm">{currentNetwork?.name || "Unknown"}</span>
         <ChevronDown
           size={14}
@@ -63,7 +63,7 @@ export default function NetworkSwitcher() {
       {isOpen && (
         <div 
           className="absolute top-full mt-2 right-0 w-56 glassmorphism rounded-lg border border-white/20 shadow-xl backdrop-blur-lg"
-          style={{ zIndex: 10001 }}
+          style={{ zIndex: 50 }}
         >
           {networks.map((network) => (
             <button

@@ -140,3 +140,95 @@
   transform: translateY(-2px);
   box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
 }
+
+/* Dynamic floating background orbs animations */
+@keyframes float-dynamic-1 {
+  0% {
+    transform: translate(0px, 0px) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translate(200px, -150px) rotate(90deg) scale(1.1);
+  }
+  50% {
+    transform: translate(-100px, -300px) rotate(180deg) scale(0.9);
+  }
+  75% {
+    transform: translate(-250px, 100px) rotate(270deg) scale(1.05);
+  }
+  100% {
+    transform: translate(0px, 0px) rotate(360deg) scale(1);
+  }
+}
+
+@keyframes float-dynamic-2 {
+  0% {
+    transform: translate(0px, 0px) rotate(0deg) scale(1);
+  }
+  20% {
+    transform: translate(-180px, 200px) rotate(72deg) scale(0.95);
+  }
+  40% {
+    transform: translate(150px, 250px) rotate(144deg) scale(1.08);
+  }
+  60% {
+    transform: translate(300px, -100px) rotate(216deg) scale(0.92);
+  }
+  80% {
+    transform: translate(-50px, -200px) rotate(288deg) scale(1.03);
+  }
+  100% {
+    transform: translate(0px, 0px) rotate(360deg) scale(1);
+  }
+}
+
+@keyframes float-dynamic-3 {
+  0% {
+    transform: translate(0px, 0px) rotate(0deg) scale(1);
+  }
+  16% {
+    transform: translate(120px, 180px) rotate(60deg) scale(1.06);
+  }
+  33% {
+    transform: translate(-200px, 300px) rotate(120deg) scale(0.88);
+  }
+  50% {
+    transform: translate(-300px, -50px) rotate(180deg) scale(1.12);
+  }
+  66% {
+    transform: translate(80px, -250px) rotate(240deg) scale(0.94);
+  }
+  83% {
+    transform: translate(250px, 50px) rotate(300deg) scale(1.02);
+  }
+  100% {
+    transform: translate(0px, 0px) rotate(360deg) scale(1);
+  }
+}
+
+.float-dynamic-1 {
+  animation: float-dynamic-1 28s ease-in-out infinite;
+}
+
+.float-dynamic-2 {
+  animation: float-dynamic-2 35s ease-in-out infinite;
+}
+
+.float-dynamic-3 {
+  animation: float-dynamic-3 42s ease-in-out infinite;
+}
+
+/* Toast notification animations */
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
