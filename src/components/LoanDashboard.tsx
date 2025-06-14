@@ -2,7 +2,7 @@
 // src/components/LoanDashboard.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Loan, CreditSummary } from "@/types";
 import {
   CreditCard,
@@ -125,7 +125,7 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
       const createdTime = new Date(loan.createdAt).getTime();
       
       const updateRealTimeData = () => {
-        const now = new Date().getTime();
+        const now = Date.now(); // Use Date.now() for better performance
 
         // Calculate precise time elapsed since loan creation in milliseconds
         const timeElapsedMs = now - createdTime;
@@ -196,6 +196,7 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
   }, [
     loan.status,
     loan.preAuthExpiresAt,
+    loan.preAuthCreatedAt,
     loan.createdAt,
     loan.borrowAmount,
     loan.interestRate,
@@ -228,258 +229,188 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
   };
 
   const formatDate = (dateString: string) => {
-    return (
-      new Date(dateString).toLocaleDateString() +
-      " " +
-      new Date(dateString).toLocaleTimeString()
-    );
+    // Use stable UTC formatting to prevent hydration mismatches
+    const date = new Date(dateString);
+    return date.toISOString().replace('T', ' ').substring(0, 19);
   };
 
-  const daysActive = Math.floor(
-    (new Date().getTime() - new Date(loan.createdAt).getTime()) /
-      (1000 * 60 * 60 * 24)
-  );
+  // Use stable calculation that doesn't depend on current time during render
+  const [daysActive, setDaysActive] = useState(0);
+  
+  useEffect(() => {
+    const calculateDaysActive = () => {
+      const now = new Date().getTime();
+      const created = new Date(loan.createdAt).getTime();
+      return Math.floor((now - created) / (1000 * 60 * 60 * 24));
+    };
+    
+    setDaysActive(calculateDaysActive());
+    
+    // Update every minute to keep it relatively current
+    const interval = setInterval(() => {
+      setDaysActive(calculateDaysActive());
+    }, 60000);
+    
+    return () => clearInterval(interval);
+  }, [loan.createdAt]);
 
-  const dailyInterest = (loan.borrowAmount * (loan.interestRate / 100)) / 365;
+  const dailyInterest = (loan.borrowAmount * (loan.interestRate / 100)) / 365; // Interest calculated on USD value
   const secondlyInterest = dailyInterest / (24 * 60 * 60); // Interest per second for display
 
   return (
-    <div className="glassmorphism rounded-xl p-6 border border-white/20 card-hover">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
-            <DollarSign size={20} className="text-white" />
+    <div className="glassmorphism rounded-2xl p-6 border border-white/20 hover:border-white/30 transition-all duration-300 shadow-lg hover:shadow-xl">
+      <div className="flex items-start justify-between mb-6">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+            <DollarSign size={22} className="text-white" />
           </div>
-          <div>
-            <h3 className="font-bold text-white text-lg">
-              ${loan.borrowAmount.toLocaleString()} {loan.asset}
+          <div className="space-y-1">
+            <h3 className="font-bold text-white text-xl leading-tight">
+              {loan.borrowAmountETH ? `${loan.borrowAmountETH.toFixed(4)} ${loan.asset}` : `${loan.borrowAmount.toLocaleString()} ${loan.asset}`}
             </h3>
-            <p className="text-sm text-gray-400">Loan #{loan.id.slice(-8)}</p>
+            {loan.borrowAmountETH && (
+              <div className="text-sm text-gray-300 space-y-0.5">
+                <p>≈ ${loan.borrowAmount.toLocaleString()} USD</p>
+                {loan.ethPriceAtCreation && (
+                  <p className="text-xs text-gray-400">ETH @ ${loan.ethPriceAtCreation.toLocaleString()}</p>
+                )}
+              </div>
+            )}
+            <p className="text-sm text-gray-400 font-mono">#{loan.id.slice(-8)}</p>
           </div>
         </div>
 
         <div
-          className={`px-3 py-1 rounded-full border flex items-center gap-2 ${getStatusColor(
+          className={`px-4 py-2 rounded-xl border flex items-center gap-2 ${getStatusColor(
             loan.status
-          )}`}
+          )} shadow-sm`}
         >
           {getStatusIcon(loan.status)}
-          <span className="text-sm font-medium capitalize">{loan.status}</span>
+          <span className="text-sm font-semibold capitalize">{loan.status}</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div className="bg-white/5 rounded-lg p-3">
-          <p className="text-xs text-gray-400 mb-1">Pre-Auth Amount</p>
-          <p className="text-sm font-semibold text-white">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <div className="glassmorphism rounded-xl p-4 border border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-amber-500/10 hover:border-yellow-500/30 transition-all">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-7 h-7 bg-yellow-500/20 rounded-lg flex items-center justify-center">
+              <DollarSign size={14} className="text-yellow-400" />
+            </div>
+            <p className="text-xs text-yellow-200 font-medium">Collateral</p>
+          </div>
+          <p className="text-lg font-bold text-white">
             ${loan.preAuthAmount.toLocaleString()}
           </p>
         </div>
-        <div className="bg-white/5 rounded-lg p-3">
-          <p className="text-xs text-gray-400 mb-1">LTV Ratio</p>
-          <p className="text-sm font-semibold text-white">{loan.ltvRatio}%</p>
+        <div className="glassmorphism rounded-xl p-4 border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 hover:border-blue-500/30 transition-all">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-7 h-7 bg-blue-500/20 rounded-lg flex items-center justify-center">
+              <TrendingUp size={14} className="text-blue-400" />
+            </div>
+            <p className="text-xs text-blue-200 font-medium">LTV Ratio</p>
+          </div>
+          <p className="text-lg font-bold text-white">{loan.ltvRatio}%</p>
         </div>
-        <div className="bg-white/5 rounded-lg p-3">
-          <p className="text-xs text-gray-400 mb-1">Interest Rate</p>
-          <p className="text-sm font-semibold text-white">
+        <div className="glassmorphism rounded-xl p-4 border border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10 hover:border-green-500/30 transition-all">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-7 h-7 bg-green-500/20 rounded-lg flex items-center justify-center">
+              <Zap size={14} className="text-green-400" />
+            </div>
+            <p className="text-xs text-green-200 font-medium">APY Rate</p>
+          </div>
+          <p className="text-lg font-bold text-white">
             {loan.interestRate}%
           </p>
         </div>
-        <div className="bg-white/5 rounded-lg p-3">
-          <p className="text-xs text-gray-400 mb-1">Days Active</p>
-          <p className="text-sm font-semibold text-white">{daysActive}</p>
+        <div className="glassmorphism rounded-xl p-4 border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-violet-500/10 hover:border-purple-500/30 transition-all">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-7 h-7 bg-purple-500/20 rounded-lg flex items-center justify-center">
+              <Clock size={14} className="text-purple-400" />
+            </div>
+            <p className="text-xs text-purple-200 font-medium">Days Active</p>
+          </div>
+          <p className="text-lg font-bold text-white">{daysActive}</p>
         </div>
       </div>
 
       {loan.status === "active" && (
         <>
-          <div className="glassmorphism rounded-lg p-3 mb-4 border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-orange-500/10">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp size={14} className="text-amber-300 animate-pulse" />
-              <span className="text-amber-200 text-sm font-semibold">
-                Interest Accrued (Real-Time)
+          <div className="glassmorphism rounded-xl p-5 mb-6 border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-orange-500/10 shadow-lg">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center">
+                <TrendingUp size={16} className="text-amber-300 animate-pulse" />
+              </div>
+              <span className="text-amber-100 text-lg font-bold">
+                Interest Accrued
+              </span>
+              <span className="px-2 py-1 bg-amber-500/20 text-amber-200 rounded-full text-xs font-medium">
+                REAL-TIME
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <p className="text-white text-lg font-mono">
-                ${currentInterest.toFixed(6)}
-              </p>
-              <p className="text-amber-200 text-xs">
-                +${secondlyInterest.toFixed(8)}/sec
-              </p>
+            <div className="space-y-3">
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-white text-2xl font-mono font-bold">
+                    ${currentInterest.toFixed(6)}
+                  </p>
+                  <p className="text-amber-200 text-sm">
+                    +${secondlyInterest.toFixed(8)}/second
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-amber-200 text-sm">Daily Rate</p>
+                  <p className="text-white font-semibold">${dailyInterest.toFixed(4)}</p>
+                </div>
+              </div>
+              <div className="w-full h-1 bg-amber-900/30 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 w-full animate-pulse"></div>
+              </div>
             </div>
-            <p className="text-amber-200 text-xs mt-1">
-              Daily: ${dailyInterest.toFixed(4)} | Rate: {loan.interestRate}%
-              APY
-            </p>
           </div>
 
-          {/* Chainlink Automation Countdown Display */}
+          {/* Time Remaining Display - Clean Style */}
           {loan.preAuthExpiresAt && (
-            <div className="glassmorphism rounded-xl p-6 border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-purple-500/10 relative overflow-hidden mb-4">
-              <div className="flex items-center gap-8">
-                {/* Dynamic Circular Progress Credit Card Icon */}
-                <div className="relative flex flex-col items-center">
-                  {/* Main circular progress */}
-                  <svg
-                    className="w-24 h-24 transform -rotate-90 relative z-10"
-                    viewBox="0 0 96 96"
-                  >
-                    {/* Background circle - light gray for full circle */}
-                    <circle
-                      cx="48"
-                      cy="48"
-                      r="40"
-                      stroke="rgba(255, 255, 255, 0.2)"
-                      strokeWidth="6"
-                      fill="none"
-                    />
-
-                    {/* Progress circle - shows countdown remaining time */}
-                    <circle
-                      cx="48"
-                      cy="48"
-                      r="40"
-                      stroke="url(#countdownGradient)"
-                      strokeWidth="6"
-                      fill="none"
-                      strokeLinecap="round"
-                      className="transition-all duration-100 ease-linear"
-                      style={{
-                        strokeDasharray: `${2 * Math.PI * 40}`,
-                        strokeDashoffset: `${
-                          2 * Math.PI * 40 * (1 - progressPercentage / 100)
-                        }`,
-                      }}
-                    />
-
-                    {/* Animated tip at the current progress point - always visible when not expired */}
-                    {timeRemaining !== "EXPIRED" && (
-                      <circle
-                        cx={
-                          48 +
-                          40 *
-                            Math.cos(
-                              ((progressPercentage * 3.6 - 90) * Math.PI) / 180
-                            )
-                        }
-                        cy={
-                          48 +
-                          40 *
-                            Math.sin(
-                              ((progressPercentage * 3.6 - 90) * Math.PI) / 180
-                            )
-                        }
-                        r="3"
-                        fill={
-                          progressPercentage < 20
-                            ? "rgba(244, 63, 94, 0.8)"
-                            : progressPercentage < 50
-                            ? "rgba(251, 191, 36, 0.8)"
-                            : "rgba(52, 211, 153, 0.8)"
-                        }
-                        className="animate-pulse"
-                      />
-                    )}
-
-                    {/* Dynamic gradient based on time remaining */}
-                    <defs>
-                      <linearGradient
-                        id="countdownGradient"
-                        x1="0%"
-                        y1="0%"
-                        x2="100%"
-                        y2="100%"
-                      >
-                        {progressPercentage < 20 ? (
-                          // Rose gradient for critical time
-                          <>
-                            <stop offset="0%" stopColor="rgba(244, 63, 94, 0.8)" />
-                            <stop offset="50%" stopColor="rgba(225, 29, 72, 0.6)" />
-                            <stop offset="100%" stopColor="rgba(190, 18, 60, 0.4)" />
-                          </>
-                        ) : progressPercentage < 50 ? (
-                          // Amber gradient for medium time
-                          <>
-                            <stop offset="0%" stopColor="rgba(251, 191, 36, 0.8)" />
-                            <stop offset="50%" stopColor="rgba(245, 158, 11, 0.6)" />
-                            <stop offset="100%" stopColor="rgba(217, 119, 6, 0.4)" />
-                          </>
-                        ) : (
-                          // Emerald gradient for plenty of time
-                          <>
-                            <stop offset="0%" stopColor="rgba(52, 211, 153, 0.8)" />
-                            <stop offset="50%" stopColor="rgba(16, 185, 129, 0.6)" />
-                            <stop offset="100%" stopColor="rgba(5, 150, 105, 0.4)" />
-                          </>
-                        )}
-                      </linearGradient>
-                    </defs>
-                  </svg>
-
-                  {/* Credit Card Icon - perfectly centered */}
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                    {timeRemaining === "EXPIRED" ? (
-                      <AlertCircle className="w-8 h-8 text-red-400 animate-bounce" />
-                    ) : (
-                      <div className="w-8 h-5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm relative border border-blue-400/50">
-                        {/* EMV Chip */}
-                        <div className="absolute top-0.5 left-0.5 w-1 h-0.5 bg-yellow-300 rounded-sm"></div>
-                        {/* Card number */}
-                        <div className="absolute bottom-0 right-0.5 text-white text-xs font-mono">
-                          ••••
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Progress percentage display */}
-                  <div
-                    className={`mt-3 text-xs font-mono font-bold transition-colors duration-300 ${
+            <div
+              className={`flex items-start gap-3 p-4 rounded-xl border mb-4 ${
+                progressPercentage < 20
+                  ? "text-red-300 bg-red-500/10 border-red-500/30"
+                  : progressPercentage < 50
+                  ? "text-orange-300 bg-orange-500/10 border-orange-500/30"
+                  : timeRemaining === "EXPIRED"
+                  ? "text-red-300 bg-red-500/10 border-red-500/30"
+                  : "text-blue-300 bg-blue-500/10 border-blue-500/30"
+              }`}
+            >
+              <Clock size={20} className="mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-semibold flex items-center gap-2 mb-2">
+                  Time Remaining
+                  <span
+                    className={`px-2 py-1 rounded text-xs font-mono ${
                       progressPercentage < 20
-                        ? "text-rose-300"
+                        ? "bg-red-500/20 text-red-200"
                         : progressPercentage < 50
-                        ? "text-amber-300"
-                        : "text-emerald-300"
+                        ? "bg-orange-500/20 text-orange-200"
+                        : timeRemaining === "EXPIRED"
+                        ? "bg-red-500/20 text-red-200"
+                        : "bg-blue-500/20 text-blue-200"
                     }`}
                   >
-                    {progressPercentage < 1 && progressPercentage > 0
-                      ? progressPercentage.toFixed(3)
-                      : progressPercentage < 10
-                      ? progressPercentage.toFixed(2)
-                      : progressPercentage >= 99
-                      ? progressPercentage.toFixed(2)
-                      : progressPercentage.toFixed(1)}
-                    %
-                  </div>
-                </div>
-
-                {/* Content */}
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-blue-300 text-lg font-bold">
-                      Time Remaining
-                    </span>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-blue-200 text-sm">
-                        Until auto-charge:
-                      </span>
-                      <span className="text-blue-100 font-mono text-lg font-semibold">
-                        {timeRemaining === "EXPIRED"
-                          ? "EXPIRED"
-                          : timeRemaining}
-                      </span>
-                    </div>
-
-                    <div className="glassmorphism rounded-lg p-3 border border-white/10 bg-white/5">
-                      <p className="text-blue-200 text-xs leading-relaxed">
-                        💳 Your credit card will be charged automatically before
-                        expiry. Repay early to cancel.
-                      </p>
-                    </div>
+                    {timeRemaining === "EXPIRED" ? "EXPIRED" : timeRemaining}
+                  </span>
+                </p>
+                <p className="text-sm mb-3">
+                  {timeRemaining === "EXPIRED" 
+                    ? "Pre-authorization has expired. Loan may be liquidated."
+                    : "Automated charge protection active until expiry"}
+                </p>
+                <div className="glassmorphism rounded-lg p-3 border border-white/10 bg-white/5">
+                  <div className="flex items-start gap-2">
+                    <CreditCard size={14} className="text-blue-300 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs leading-relaxed opacity-90">
+                      Your credit card will be charged automatically before expiry. 
+                      Repay early to cancel the automation and release the hold.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -488,19 +419,23 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
         </>
       )}
 
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-3 mb-6">
         <button
           onClick={() => setShowDetails(!showDetails)}
-          className="flex-1 glassmorphism text-white py-2 px-3 rounded-lg text-sm font-medium hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+          className="flex-1 glassmorphism text-white py-3 px-4 rounded-xl text-sm font-semibold hover:bg-white/10 transition-all flex items-center justify-center gap-2 border border-white/10"
         >
-          <Eye size={14} />
+          <Eye size={16} />
           {showDetails ? "Hide" : "Show"} Details
         </button>
       </div>
 
       {showDetails && (
-        <div className="space-y-3 p-4 bg-black/20 rounded-lg border border-white/10">
-          <div className="grid grid-cols-2 gap-4 text-xs">
+        <div className="glassmorphism rounded-xl p-5 border border-white/10 bg-gradient-to-br from-black/20 to-gray-900/20 mb-6">
+          <h4 className="text-white font-semibold mb-4 flex items-center gap-2">
+            <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
+            Loan Details
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
               <p className="text-gray-400 mb-1">Created</p>
               <p className="text-white font-mono">
@@ -558,30 +493,30 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
       )}
 
       {loan.status === "active" && (
-        <div className="flex gap-2 mt-4">
+        <div className="flex gap-3 pt-2">
           <button
             onClick={() => onCharge(loan.id)}
             disabled={isProcessing}
-            className="flex-1 glassmorphism border border-red-500/30 bg-gradient-to-r from-red-500/10 to-red-600/10 hover:from-red-500/20 hover:to-red-600/20 text-red-300 hover:text-red-200 py-3 px-4 rounded-lg font-semibold disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+            className="flex-1 glassmorphism border border-red-500/30 bg-gradient-to-r from-red-500/10 to-red-600/10 hover:from-red-500/20 hover:to-red-600/20 text-red-300 hover:text-red-200 py-4 px-6 rounded-xl font-bold disabled:opacity-50 transition-all flex items-center justify-center gap-3 shadow-lg hover:shadow-xl"
           >
             {isProcessing ? (
-              <Loader className="animate-spin" size={16} />
+              <Loader className="animate-spin" size={18} />
             ) : (
-              <Zap size={16} />
+              <Zap size={18} />
             )}
             Charge Card
           </button>
           <button
             onClick={() => onRelease(loan.id)}
             disabled={isProcessing}
-            className="flex-1 glassmorphism border border-green-500/30 bg-gradient-to-r from-green-500/10 to-green-600/10 hover:from-green-500/20 hover:to-green-600/20 text-green-300 hover:text-green-200 py-3 px-4 rounded-lg font-semibold disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+            className="flex-1 glassmorphism border border-green-500/30 bg-gradient-to-r from-green-500/10 to-green-600/10 hover:from-green-500/20 hover:to-green-600/20 text-green-300 hover:text-green-200 py-4 px-6 rounded-xl font-bold disabled:opacity-50 transition-all flex items-center justify-center gap-3 shadow-lg hover:shadow-xl"
           >
             {isProcessing ? (
-              <Loader className="animate-spin" size={16} />
+              <Loader className="animate-spin" size={18} />
             ) : (
-              <Shield size={16} />
+              <Shield size={18} />
             )}
-            Release
+            Release Loan
           </button>
         </div>
       )}
@@ -614,36 +549,50 @@ function CreditSummaryCard({
   if (!summary) return null;
 
   return (
-    <div className="glassmorphism rounded-xl p-6 border border-white/20">
-      <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-        <CreditCard size={20} />
-        Credit Summary
-      </h3>
+    <div className="glassmorphism rounded-xl p-6 border border-white/20 hover:border-white/30 transition-colors">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 bg-gradient-to-r from-sky-500 to-blue-500 rounded-lg flex items-center justify-center">
+          <CreditCard size={20} className="text-white" />
+        </div>
+        <h3 className="text-xl font-bold text-white">Credit Summary</h3>
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="glassmorphism rounded-lg p-4 border border-sky-500/20 bg-gradient-to-br from-sky-500/10 to-blue-500/10">
-          <p className="text-sky-300 text-sm mb-1">Total Credit</p>
+        <div className="glassmorphism rounded-lg p-4 border border-sky-500/20 bg-gradient-to-br from-sky-500/10 to-blue-500/10 hover:border-sky-500/30 transition-colors">
+          <div className="flex items-center gap-2 mb-2">
+            <CreditCard size={16} className="text-sky-400" />
+            <p className="text-sky-300 text-sm">Total Credit</p>
+          </div>
           <p className="text-white text-lg font-bold">
             ${summary.totalCreditLimit.toLocaleString()}
           </p>
         </div>
 
-        <div className="glassmorphism rounded-lg p-4 border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-green-500/10">
-          <p className="text-emerald-300 text-sm mb-1">Available</p>
+        <div className="glassmorphism rounded-lg p-4 border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-green-500/10 hover:border-emerald-500/30 transition-colors">
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle size={16} className="text-emerald-400" />
+            <p className="text-emerald-300 text-sm">Available</p>
+          </div>
           <p className="text-white text-lg font-bold">
             ${summary.availableCredit.toLocaleString()}
           </p>
         </div>
 
-        <div className="glassmorphism rounded-lg p-4 border border-violet-500/20 bg-gradient-to-br from-violet-500/10 to-purple-500/10">
-          <p className="text-violet-300 text-sm mb-1">Active Borrowed</p>
+        <div className="glassmorphism rounded-lg p-4 border border-violet-500/20 bg-gradient-to-br from-violet-500/10 to-purple-500/10 hover:border-violet-500/30 transition-colors">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp size={16} className="text-violet-400" />
+            <p className="text-violet-300 text-sm">Active Borrowed</p>
+          </div>
           <p className="text-white text-lg font-bold">
             ${summary.totalBorrowed.toLocaleString()}
           </p>
         </div>
 
-        <div className="glassmorphism rounded-lg p-4 border border-rose-500/20 bg-gradient-to-br from-rose-500/10 to-pink-500/10">
-          <p className="text-rose-300 text-sm mb-1">Utilization</p>
+        <div className="glassmorphism rounded-lg p-4 border border-rose-500/20 bg-gradient-to-br from-rose-500/10 to-pink-500/10 hover:border-rose-500/30 transition-colors">
+          <div className="flex items-center gap-2 mb-2">
+            <Eye size={16} className="text-rose-400" />
+            <p className="text-rose-300 text-sm">Utilization</p>
+          </div>
           <p className="text-white text-lg font-bold">
             {summary.utilizationPercentage.toFixed(1)}%
           </p>
@@ -675,9 +624,9 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
   const [error, setError] = useState("");
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
 
-  // Toast management functions
+  // Toast management functions with stable ID generation
   const addToast = (type: 'success' | 'error' | 'info', title: string, message: string) => {
-    const id = Date.now().toString();
+    const id = Math.random().toString(36).substring(2, 11); // Use stable random ID instead of Date.now()
     const newToast: ToastNotification = { id, type, title, message };
     setToasts(prev => [...prev, newToast]);
   };
@@ -686,7 +635,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   };
 
-  const fetchLoans = async () => {
+  const fetchLoans = useCallback(async () => {
     try {
       setIsLoading(true);
       setError("");
@@ -707,7 +656,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [walletAddress]);
 
   const handleCharge = async (loanId: string) => {
     addToast('info', 'Processing...', 'Charging loan and capturing pre-authorization on credit card.');
@@ -771,7 +720,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
     if (walletAddress) {
       fetchLoans();
     }
-  }, [walletAddress]);
+  }, [walletAddress, fetchLoans]);
 
   if (isLoading && loans.length === 0) {
     return (
@@ -788,8 +737,11 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
     <>
       <ToastContainer toasts={toasts} onClose={removeToast} />
       <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold gradient-text">Loan Management</h2>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <CreditCard size={32} className="text-blue-400" />
+          <h2 className="text-3xl font-bold gradient-text">Loan Management</h2>
+        </div>
         <button
           onClick={fetchLoans}
           disabled={isLoading}
@@ -810,29 +762,66 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
       <CreditSummaryCard summary={creditSummary} isLoading={isLoading} />
 
       {loans.length === 0 ? (
-        <div className="glassmorphism rounded-xl p-8 text-center border border-white/20">
-          <div className="w-16 h-16 bg-gray-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <DollarSign className="text-gray-400" size={32} />
+        <div className="glassmorphism rounded-2xl p-12 text-center border border-white/20 bg-gradient-to-br from-slate-900/40 to-gray-900/40">
+          <div className="w-20 h-20 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-blue-500/30">
+            <DollarSign className="text-blue-400" size={36} />
           </div>
-          <h3 className="text-xl font-semibold text-gray-300 mb-2">
-            No Loans Found
+          <h3 className="text-2xl font-bold text-white mb-3 gradient-text">
+            No Active Loans
           </h3>
-          <p className="text-gray-400">
-            You haven't created any loans yet. Use the borrowing interface to
-            get started.
+          <p className="text-gray-400 text-lg max-w-md mx-auto leading-relaxed">
+            You haven't created any loans yet. Start borrowing against your credit card to see them here.
           </p>
         </div>
       ) : (
-        <div className="grid gap-6">
-          {loans.map((loan) => (
-            <LoanCard
-              key={loan.id}
-              loan={loan}
-              onCharge={handleCharge}
-              onRelease={handleRelease}
-              isProcessing={processingLoanId === loan.id}
-            />
-          ))}
+        <div className="space-y-4">
+          {/* Active Loans Section */}
+          {loans.filter(loan => loan.status === 'active').length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-2 h-8 bg-gradient-to-b from-emerald-500 to-green-600 rounded-full"></div>
+                <h3 className="text-xl font-bold text-white">Active Loans</h3>
+                <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 rounded-full text-sm font-medium border border-emerald-500/30">
+                  {loans.filter(loan => loan.status === 'active').length}
+                </span>
+              </div>
+              <div className="grid gap-4">
+                {loans.filter(loan => loan.status === 'active').map((loan) => (
+                  <LoanCard
+                    key={loan.id}
+                    loan={loan}
+                    onCharge={handleCharge}
+                    onRelease={handleRelease}
+                    isProcessing={processingLoanId === loan.id}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Completed Loans Section */}
+          {loans.filter(loan => loan.status !== 'active').length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 mb-4 mt-8">
+                <div className="w-2 h-8 bg-gradient-to-b from-gray-500 to-slate-600 rounded-full"></div>
+                <h3 className="text-xl font-bold text-white">Completed Loans</h3>
+                <span className="px-3 py-1 bg-gray-500/20 text-gray-300 rounded-full text-sm font-medium border border-gray-500/30">
+                  {loans.filter(loan => loan.status !== 'active').length}
+                </span>
+              </div>
+              <div className="grid gap-4">
+                {loans.filter(loan => loan.status !== 'active').map((loan) => (
+                  <LoanCard
+                    key={loan.id}
+                    loan={loan}
+                    onCharge={handleCharge}
+                    onRelease={handleRelease}
+                    isProcessing={processingLoanId === loan.id}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
       </div>

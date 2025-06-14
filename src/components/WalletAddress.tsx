@@ -39,8 +39,8 @@ export default function WalletAddress() {
         await navigator.clipboard.writeText(address);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-      } catch (error) {
-        console.error("Failed to copy address:", error);
+      } catch {
+        // Silent error handling
       }
     }
   };

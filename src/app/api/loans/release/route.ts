@@ -9,7 +9,6 @@ const logRelease = createLogger("RELEASE");
 
 export async function POST(request: NextRequest) {
   const requestId = generateRequestId();
-  logRelease("RELEASE_REQUEST_START", { requestId });
 
   try {
     const { loanId, reason } = await request.json();
@@ -17,7 +16,6 @@ export async function POST(request: NextRequest) {
     // Validate input
     if (!loanId) {
       const error = "Loan ID is required";
-      logRelease("VALIDATION_ERROR", { requestId, error }, true);
       return NextResponse.json({ success: false, error }, { status: 400 });
     }
 
@@ -25,30 +23,17 @@ export async function POST(request: NextRequest) {
     const loan = loanStorage.getLoan(loanId);
     if (!loan) {
       const error = "Loan not found";
-      logRelease("LOAN_NOT_FOUND", { requestId, loanId }, true);
       return NextResponse.json({ success: false, error }, { status: 404 });
     }
 
     if (loan.status !== "active") {
       const error = `Loan is not active. Current status: ${loan.status}`;
-      logRelease(
-        "INVALID_LOAN_STATUS",
-        { requestId, loanId, status: loan.status },
-        true
-      );
       return NextResponse.json({ success: false, error }, { status: 400 });
     }
 
-    logRelease("LOAN_FOUND", {
-      requestId,
-      loanId,
-      preAuthId: loan.preAuthId,
-      preAuthAmount: loan.preAuthAmount,
-    });
 
     // Demo mode simulation
     if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
-      logRelease("DEMO_MODE_RELEASE", { requestId, loanId });
 
       // Simulate processing delay
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -67,7 +52,6 @@ export async function POST(request: NextRequest) {
         requestId,
       };
 
-      logRelease("DEMO_RELEASE_SUCCESS", { requestId, response });
       return NextResponse.json(response);
     }
 
@@ -131,28 +115,19 @@ export async function POST(request: NextRequest) {
             note: "Pre-authorization hold successfully released - funds available on customer's card",
           };
 
-          logRelease("RELEASE_SUCCESS", { requestId, response });
           return NextResponse.json(response);
         } else {
           const error = `Failed to cancel pre-authorization. Status: ${canceledPaymentIntent.status}`;
-          logRelease("CANCEL_FAILED", { requestId, status: canceledPaymentIntent.status }, true);
           return NextResponse.json({ success: false, error }, { status: 400 });
         }
       } else if (existingPaymentIntent.status === "canceled") {
         const error = "Pre-authorization is already canceled";
-        logRelease("ALREADY_CANCELED", { requestId, paymentIntentId }, true);
         return NextResponse.json({ success: false, error }, { status: 400 });
       } else if (existingPaymentIntent.status === "succeeded") {
         const error = "Cannot release - pre-authorization has already been captured";
-        logRelease("ALREADY_CAPTURED", { requestId, paymentIntentId }, true);
         return NextResponse.json({ success: false, error }, { status: 400 });
       } else {
         const error = `Cannot release pre-authorization. Current status: ${existingPaymentIntent.status}`;
-        logRelease("INVALID_STATUS_FOR_RELEASE", {
-          requestId,
-          paymentIntentId,
-          currentStatus: existingPaymentIntent.status
-        }, true);
         return NextResponse.json({ success: false, error }, { status: 400 });
       }
       
@@ -186,20 +161,9 @@ export async function POST(request: NextRequest) {
         requestId,
       };
 
-      logRelease("RELEASE_WITH_WARNING", { requestId, response });
       return NextResponse.json(response);
     }
   } catch (error: any) {
-    logRelease(
-      "RELEASE_ERROR",
-      {
-        requestId,
-        errorMessage: error.message || "unknown",
-        errorStack: error.stack,
-      },
-      true
-    );
-
     return NextResponse.json(
       {
         success: false,
@@ -214,7 +178,6 @@ export async function POST(request: NextRequest) {
 // Health check endpoint for release functionality
 export async function GET() {
   const requestId = Math.random().toString(36).substring(2, 11);
-  logRelease("HEALTH_CHECK", { requestId });
 
   try {
     const stats = loanStorage.getStats();
@@ -228,8 +191,6 @@ export async function GET() {
       stripeConfigured: !!process.env.STRIPE_SECRET_KEY,
     });
   } catch (error: any) {
-    logRelease("HEALTH_CHECK_ERROR", { requestId, error: error.message }, true);
-
     return NextResponse.json(
       {
         status: "error",

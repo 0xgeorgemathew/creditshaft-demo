@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
 import WalletConnection from "@/components/WalletConnection";
 import StripePreAuth from "@/components/StripePreAuth";
@@ -25,47 +25,49 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<
     "overview" | "borrow" | "manage" | "setup"
   >("overview");
-  const [sessionStorage, setSessionStorage] = useState<{ [key: string]: any }>(
-    {}
-  );
   const [hasActiveLoans, setHasActiveLoans] = useState(false);
+  const [sessionStorageCount, setSessionStorageCount] = useState(0);
+  const [isSessionRestored, setIsSessionRestored] = useState(false);
 
-  // Enhanced session storage helper (in-memory)
+  // Enhanced session storage helper (browser persistent)
   const saveToSession = (key: string, data: any) => {
     try {
-      const dataString = JSON.stringify(data);
-      setSessionStorage((prev) => ({ ...prev, [key]: dataString }));
-      console.log("💾 Saved to session:", key, data);
+      if (typeof window !== 'undefined') {
+        const dataString = JSON.stringify(data);
+        window.sessionStorage.setItem(key, dataString);
+      }
     } catch (error) {
-      console.error("❌ Failed to save to session:", error);
+      // Silent error handling
     }
   };
 
   const loadFromSession = (key: string): any | null => {
     try {
-      const dataString = sessionStorage[key];
-      if (dataString) {
-        const data = JSON.parse(dataString);
-        console.log("📁 Loaded from session:", key, data);
-        return data;
+      if (typeof window !== 'undefined') {
+        const dataString = window.sessionStorage.getItem(key);
+        if (dataString) {
+          const data = JSON.parse(dataString);
+          return data;
+        }
       }
     } catch (error) {
-      console.error("❌ Failed to load from session:", error);
+      // Silent error handling
     }
     return null;
   };
 
   const removeFromSession = (key: string) => {
-    setSessionStorage((prev) => {
-      const newStorage = { ...prev };
-      delete newStorage[key];
-      return newStorage;
-    });
-    console.log("🗑️ Removed from session:", key);
+    try {
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem(key);
+      }
+    } catch (error) {
+      // Silent error handling
+    }
   };
 
   // Check for active loans
-  const checkActiveLoans = async () => {
+  const checkActiveLoans = useCallback(async () => {
     if (!address) return;
 
     try {
@@ -79,21 +81,26 @@ export default function Home() {
           (loan: Loan) => loan.status === "active"
         );
         setHasActiveLoans(activeLoans.length > 0);
-        console.log(
-          "🔍 Active loans check:",
-          activeLoans.length,
-          "active loans found"
-        );
       }
-    } catch (error) {
-      console.error("❌ Failed to check active loans:", error);
+    } catch {
+      // Silent error handling
     }
-  };
+  }, [address]);
 
-  // Debug tab changes
+
+  // Update session storage count on client-side to prevent hydration mismatch
   useEffect(() => {
-    console.log("📋 Active tab changed to:", activeTab);
-  }, [activeTab]);
+    if (typeof window !== 'undefined') {
+      setSessionStorageCount(window.sessionStorage.length);
+      
+      // Check if session was restored for the current address
+      if (address) {
+        const sessionKey = `${PREAUTH_STORAGE_KEY}_${address}`;
+        const hasSessionData = !!window.sessionStorage.getItem(sessionKey);
+        setIsSessionRestored(hasSessionData && !!preAuthData);
+      }
+    }
+  }, [address, preAuthData]);
 
   // Load preAuth data from session when component mounts
   useEffect(() => {
@@ -102,21 +109,18 @@ export default function Home() {
       const savedPreAuth = loadFromSession(sessionKey);
 
       if (savedPreAuth) {
-        console.log("🔄 Restoring preAuth data from session for", address);
         setPreAuthData(savedPreAuth);
 
         // Check if user was in the middle of borrowing or managing loans
         const lastActiveTab = loadFromSession(`tab_${address}`) || "overview";
         setActiveTab(lastActiveTab);
-        console.log("📋 Restored active tab:", lastActiveTab);
       } else {
-        console.log("🆕 No saved preAuth data found for", address);
       }
 
       // Check for active loans whenever wallet connects
       checkActiveLoans();
     }
-  }, [isConnected, address]);
+  }, [isConnected, address, checkActiveLoans]);
 
   // Save active tab to session whenever it changes
   useEffect(() => {
@@ -128,25 +132,21 @@ export default function Home() {
   // Reset states when wallet disconnects
   useEffect(() => {
     if (!isConnected) {
-      console.log("👋 Wallet disconnected, clearing all data");
       setPreAuthData(null);
       setShowBorrowing(false);
       setShowDashboard(false);
       setActiveTab("overview");
 
-      // Clear all session data
-      setSessionStorage({});
+      // Session data persists across wallet disconnections for better UX
     }
   }, [isConnected]);
 
   const handleWalletConnected = (walletAddress: string) => {
-    console.log("🔗 Wallet connected:", walletAddress);
     // Always redirect to overview after wallet connection
     setActiveTab("overview");
   };
 
   const handlePreAuthSuccess = (data: PreAuthData) => {
-    console.log("✅ PreAuth success, saving data:", data);
 
     // Enhanced preAuth data with wallet linkage
     const enhancedData = {
@@ -180,10 +180,8 @@ export default function Home() {
       })
         .then((response) => response.json())
         .then((result) => {
-          console.log("📦 Pre-auth data stored in backend:", result);
         })
         .catch((error) => {
-          console.error("❌ Failed to store pre-auth data:", error);
         });
     }
 
@@ -192,14 +190,12 @@ export default function Home() {
   };
 
   const handleBorrow = () => {
-    console.log("💰 Starting borrow flow");
     // Only proceed to borrow tab if pre-auth data exists
     if (preAuthData) {
       setShowBorrowing(true);
       setActiveTab("borrow");
     } else {
       // If no pre-auth data, user needs to set up card first
-      console.log("No pre-auth data, user needs to set up card first");
       // This shouldn't happen since borrow button only shows when pre-auth exists
       // But adding as safety measure
       setActiveTab("overview");
@@ -207,12 +203,8 @@ export default function Home() {
   };
 
   const handleBorrowSuccess = () => {
-    console.log("🎯 handleBorrowSuccess called - starting navigation");
-    console.log("Current activeTab:", activeTab);
     setShowBorrowing(false);
     setActiveTab("manage");
-    console.log("Set activeTab to 'manage'");
-    console.log("Redirecting to manage loans tab after successful borrow");
 
     // Check for active loans after successful borrow
     checkActiveLoans();
@@ -322,7 +314,7 @@ export default function Home() {
         {/* Session Restoration Indicator */}
         {isConnected &&
           preAuthData &&
-          loadFromSession(`${PREAUTH_STORAGE_KEY}_${address}`) && (
+          isSessionRestored && (
             <div className="mb-6 glassmorphism rounded-xl p-4 border border-green-500/30 bg-gradient-to-r from-green-500/10 to-emerald-500/10">
               <div className="flex items-center gap-3">
                 <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
@@ -533,16 +525,14 @@ export default function Home() {
               <p>
                 Session Storage Keys:{" "}
                 <span className="text-orange-400">
-                  {Object.keys(sessionStorage).length}
+                  {sessionStorageCount}
                 </span>
               </p>
               {address && preAuthData && (
                 <p>
                   Session Restored:{" "}
                   <span className="text-green-400">
-                    {loadFromSession(`${PREAUTH_STORAGE_KEY}_${address}`)
-                      ? "Yes"
-                      : "No"}
+                    {isSessionRestored ? "Yes" : "No"}
                   </span>
                 </p>
               )}

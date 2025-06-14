@@ -30,6 +30,8 @@ export interface Loan {
 
   // Loan details
   borrowAmount: number;
+  borrowAmountETH?: number; // New field for ETH amount
+  ethPriceAtCreation?: number; // ETH price when loan was created
   asset: string;
   interestRate: number;
   ltvRatio: number;

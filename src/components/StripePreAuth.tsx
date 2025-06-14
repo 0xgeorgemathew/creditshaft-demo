@@ -52,16 +52,6 @@ function StripeForm({ walletAddress, onPreAuthSuccess }: StripePreAuthProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [cardComplete, setCardComplete] = useState(false);
 
-  // Enhanced logging function
-  const addLog = (message: string, data?: any) => {
-    const timestamp = new Date().toLocaleTimeString();
-    const logMessage = `[${timestamp}] ${message}`;
-    console.log(logMessage, data || "");
-    setLogs((prev) => [
-      ...prev,
-      logMessage + (data ? `: ${JSON.stringify(data)}` : ""),
-    ]);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,11 +71,8 @@ function StripeForm({ walletAddress, onPreAuthSuccess }: StripePreAuthProps) {
     setError("");
     setLogs([]);
 
-    addLog("🚀 Starting secure Stripe Elements flow");
-
     try {
       // Create payment method using Stripe Elements
-      addLog("🔐 Creating secure payment method token");
 
       const { error: stripeError, paymentMethod } =
         await stripe.createPaymentMethod({
@@ -97,21 +84,10 @@ function StripeForm({ walletAddress, onPreAuthSuccess }: StripePreAuthProps) {
         });
 
       if (stripeError) {
-        addLog("❌ Stripe Elements error", {
-          type: stripeError.type,
-          code: stripeError.code,
-          message: stripeError.message,
-        });
         setError(stripeError.message || "Payment method creation failed");
         return;
       }
 
-      addLog("✅ Payment method created securely", {
-        paymentMethodId: paymentMethod.id,
-        cardBrand: paymentMethod.card?.brand,
-        cardLast4: paymentMethod.card?.last4,
-        cardCountry: paymentMethod.card?.country,
-      });
 
       // Send secure token to backend
       const requestData = {
@@ -119,10 +95,6 @@ function StripeForm({ walletAddress, onPreAuthSuccess }: StripePreAuthProps) {
         walletAddress,
       };
 
-      addLog("📤 Sending secure token to backend", {
-        paymentMethodId: paymentMethod.id,
-        walletAddress,
-      });
 
       const response = await fetch("/api/stripe/preauth", {
         method: "POST",
@@ -132,22 +104,9 @@ function StripeForm({ walletAddress, onPreAuthSuccess }: StripePreAuthProps) {
         body: JSON.stringify(requestData),
       });
 
-      addLog("📥 Received response from API", {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-      });
-
       const data = await response.json();
-      addLog("📋 Response data received", data);
 
       if (data.success) {
-        addLog("✅ Pre-authorization successful!", {
-          preAuthId: data.preAuthId,
-          availableCredit: data.availableCredit,
-          cardBrand: data.cardBrand,
-          cardLastFour: data.cardLastFour,
-        });
 
         const preAuthData: PreAuthData = {
           available_credit: data.availableCredit,
@@ -163,26 +122,14 @@ function StripeForm({ walletAddress, onPreAuthSuccess }: StripePreAuthProps) {
           setupIntentId: data.preAuthId, // setupIntentId is the same as preAuthId
         };
 
-        addLog("🎯 Calling onPreAuthSuccess with data", preAuthData);
         onPreAuthSuccess(preAuthData);
       } else {
-        addLog("❌ Pre-authorization failed", {
-          error: data.error,
-          code: data.code,
-          details: data.details,
-        });
         setError(data.error || "Pre-authorization failed. Please try again.");
       }
     } catch (err: any) {
-      addLog("💥 Exception caught during request", {
-        name: err.name,
-        message: err.message,
-        stack: err.stack,
-      });
       setError("Network error. Please check your connection and try again.");
     } finally {
       setIsProcessing(false);
-      addLog("🏁 Pre-authorization request completed");
     }
   };
 
@@ -203,10 +150,6 @@ function StripeForm({ walletAddress, onPreAuthSuccess }: StripePreAuthProps) {
       declined: "4000 0000 0000 0002",
     };
 
-    addLog("🎭 Test card info", {
-      card: testCards[cardType],
-      note: "Please enter this card manually in the form below",
-    });
 
     // Focus the card element for user convenience
     cardElement.focus();

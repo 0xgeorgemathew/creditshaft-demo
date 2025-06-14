@@ -1,10 +1,7 @@
 // src/app/api/chainlink/webhook/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { loanStorage } from "../../../../lib/loanStorage";
-import { createLogger } from "../../../../lib/logger";
 import type { BlockchainLoan } from "../../../../types";
-
-const logFunction = createLogger("CHAINLINK-WEBHOOK");
 
 /**
  * Webhook endpoint for receiving smart contract events
@@ -14,14 +11,12 @@ export async function POST(request: NextRequest) {
   try {
     const event = await request.json();
     
-    logFunction("Chainlink webhook received", event);
     
     const { eventType, loanId, data } = event;
     
     const loan = loanStorage.getLoan(loanId);
     
     if (!loan) {
-      logFunction("Loan not found for webhook", { loanId }, true);
       return NextResponse.json({ 
         success: false, 
         error: "Loan not found" 
@@ -41,7 +36,6 @@ export async function POST(request: NextRequest) {
       case 'AutomationScheduled':
         blockchainLoan.automationStatus = 'scheduled';
         blockchainLoan.nextAutomationCheck = new Date(data.triggerTime * 1000).toISOString();
-        logFunction("Automation scheduled", { loanId, triggerTime: data.triggerTime });
         break;
         
       case 'AutoChargeExecuted':
@@ -51,14 +45,8 @@ export async function POST(request: NextRequest) {
           blockchainLoan.actualChargedAmount = data.chargedAmount / 100; // Convert from cents
           blockchainLoan.stripeChargeId = data.stripeChargeId;
           blockchainLoan.automationStatus = 'triggered';
-          logFunction("Auto-charge successful", { 
-            loanId, 
-            chargedAmount: blockchainLoan.actualChargedAmount,
-            stripeChargeId: blockchainLoan.stripeChargeId 
-          });
         } else {
           blockchainLoan.automationStatus = 'failed';
-          logFunction("Auto-charge failed", { loanId, error: data.error }, true);
         }
         break;
         
@@ -66,18 +54,15 @@ export async function POST(request: NextRequest) {
         blockchainLoan.status = 'released';
         blockchainLoan.releasedAt = new Date().toISOString();
         blockchainLoan.automationStatus = 'cancelled';
-        logFunction("Loan released", { loanId });
         break;
         
       case 'LoanLiquidated':
         blockchainLoan.status = 'charged';
         blockchainLoan.chargedAt = new Date().toISOString();
         blockchainLoan.automationStatus = 'triggered';
-        logFunction("Loan liquidated", { loanId, amount: data.amount });
         break;
         
       default:
-        logFunction("Unknown event type", { eventType, loanId }, true);
         return NextResponse.json({ 
           success: false, 
           error: "Unknown event type" 
@@ -96,7 +81,6 @@ export async function POST(request: NextRequest) {
     } as Partial<BlockchainLoan>);
     
     if (!updateSuccess) {
-      logFunction("Failed to update loan in storage", { loanId }, true);
       return NextResponse.json({
         success: false,
         error: "Failed to update loan"
@@ -111,7 +95,6 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
-    logFunction("Webhook processing failed", error, true);
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : "Unknown error"

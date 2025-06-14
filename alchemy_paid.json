@@ -1,0 +1,112 @@
+{
+  "timestamp": "2025-06-11T14:05:32.249Z",
+  "networkInfo": {
+    "name": "homestead",
+    "chainId": 1
+  },
+  "benchmarkOptions": {
+    "numRequests": 100,
+    "concurrency": 5,
+    "warmup": true,
+    "cooldown": 100,
+    "timeout": 10000
+  },
+  "results": [
+    {
+      "method": "getBlockNumber",
+      "avgLatency": 3.654961249999983,
+      "minLatency": 2.2922810000000027,
+      "maxLatency": 7.492684000000054,
+      "p95Latency": 7.38428399999998,
+      "p99Latency": 7.492684000000054,
+      "successRate": 100,
+      "throughput": 50.49912537635811,
+      "errorCount": 0,
+      "totalTime": 1980.232316
+    },
+    {
+      "method": "getBalance",
+      "avgLatency": 7.509979330000061,
+      "minLatency": 5.251962999999705,
+      "maxLatency": 17.164929000000484,
+      "p95Latency": 13.142206999999871,
+      "p99Latency": 17.164929000000484,
+      "successRate": 100,
+      "throughput": 48.34581962025311,
+      "errorCount": 0,
+      "totalTime": 2068.431165
+    },
+    {
+      "method": "getGasPrice",
+      "avgLatency": 6.484161270000023,
+      "minLatency": 4.912922000001345,
+      "maxLatency": 13.905888000001141,
+      "p95Latency": 8.267884999999296,
+      "p99Latency": 13.905888000001141,
+      "successRate": 100,
+      "throughput": 48.770280898797374,
+      "errorCount": 0,
+      "totalTime": 2050.429034999999
+    },
+    {
+      "method": "getTransactionCount",
+      "avgLatency": 6.830605729999952,
+      "minLatency": 4.780522999999448,
+      "maxLatency": 14.036046999999598,
+      "p95Latency": 13.099087000000509,
+      "p99Latency": 14.036046999999598,
+      "successRate": 100,
+      "throughput": 48.18948144970707,
+      "errorCount": 0,
+      "totalTime": 2075.1416489999992
+    },
+    {
+      "method": "getBlock",
+      "avgLatency": 9.15523111000024,
+      "minLatency": 4.334202000001824,
+      "maxLatency": 16.50112900000022,
+      "p95Latency": 13.669047999999748,
+      "p99Latency": 16.50112900000022,
+      "successRate": 100,
+      "throughput": 46.41323071372353,
+      "errorCount": 0,
+      "totalTime": 2154.5580530000007
+    },
+    {
+      "method": "getNetwork",
+      "avgLatency": 3.010367210000004,
+      "minLatency": 2.540681999998924,
+      "maxLatency": 8.79060500000196,
+      "p95Latency": 8.734365000000253,
+      "p99Latency": 8.79060500000196,
+      "successRate": 100,
+      "throughput": 50.86977168695712,
+      "errorCount": 0,
+      "totalTime": 1965.8039869999993
+    }
+  ],
+  "rankings": {
+    "byLatency": {
+      "title": "Methods ranked by average latency:",
+      "rankings": [
+        "1. getNetwork: 3.01 ms",
+        "2. getBlockNumber: 3.65 ms",
+        "3. getGasPrice: 6.48 ms",
+        "4. getTransactionCount: 6.83 ms",
+        "5. getBalance: 7.51 ms",
+        "6. getBlock: 9.16 ms"
+      ]
+    },
+    "byThroughput": {
+      "title": "Methods ranked by throughput:",
+      "rankings": [
+        "1. getNetwork: 50.87 req/s",
+        "2. getBlockNumber: 50.50 req/s",
+        "3. getGasPrice: 48.77 req/s",
+        "4. getBalance: 48.35 req/s",
+        "5. getTransactionCount: 48.19 req/s",
+        "6. getBlock: 46.41 req/s"
+      ]
+    }
+  }
+}

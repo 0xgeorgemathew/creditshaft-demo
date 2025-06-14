@@ -8,15 +8,17 @@ const logBorrow = createLogger("BORROW");
 
 export async function POST(request: NextRequest) {
   const requestId = generateRequestId();
-  logBorrow("BORROW_REQUEST_START", { requestId });
 
   try {
     const {
       amount,
+      amountETH,
+      ethPrice,
       asset,
       walletAddress,
       preAuthId,
       requiredPreAuth,
+      selectedLTV,
       preAuthDurationDays,
       originalCreditLimit,
       customerId,
@@ -26,17 +28,6 @@ export async function POST(request: NextRequest) {
       cardBrand,
     } = await request.json();
 
-    logBorrow("BORROW_REQUEST_DATA", {
-      requestId,
-      amount,
-      asset,
-      walletAddress,
-      preAuthId,
-      requiredPreAuth,
-      originalCreditLimit,
-      customerId: customerId ? "present" : "missing",
-      paymentMethodId: paymentMethodId ? "present" : "missing",
-    });
 
     // Store pre-auth data regardless of borrowing
     if (walletAddress && originalCreditLimit && customerId && paymentMethodId) {
@@ -54,13 +45,10 @@ export async function POST(request: NextRequest) {
       };
       
       loanStorage.storePreAuthData(walletAddress, preAuthData);
-      logBorrow("PREAUTH_DATA_STORED", { requestId, walletAddress, preAuthData });
     }
 
     // Check if this is just storing pre-auth data (amount = 0)
     if (!amount || amount === 0) {
-      logBorrow("PREAUTH_ONLY_STORAGE", { requestId, walletAddress });
-      
       const response = {
         success: true,
         message: "Pre-auth data stored successfully",
@@ -69,32 +57,29 @@ export async function POST(request: NextRequest) {
         preAuthDataStored: true,
       };
       
-      logBorrow("PREAUTH_STORAGE_SUCCESS", { requestId, response });
       return NextResponse.json(response);
     }
 
     // Validate required fields for actual borrowing
     if (!asset || !walletAddress) {
       const error = "Missing required fields: asset, walletAddress";
-      logBorrow("VALIDATION_ERROR", { requestId, error }, true);
       return NextResponse.json({ success: false, error }, { status: 400 });
     }
 
     // Generate unique loan ID
     const loanId = generateLoanId();
-    logBorrow("LOAN_ID_GENERATED", { requestId, loanId });
 
     // Demo mode processing for mock data
     if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
-      logBorrow("DEMO_MODE_PROCESSING", { requestId, loanId });
 
       // Simulate processing delay
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Calculate loan parameters
-      const borrowAmountNum = parseFloat(amount);
-      const preAuthAmount = requiredPreAuth || Math.ceil(borrowAmountNum / 0.8);
-      const ltvRatio = Math.round((borrowAmountNum / preAuthAmount) * 100);
+      const borrowAmountUSD = parseFloat(amount);
+      const borrowAmountETHNum = parseFloat(amountETH);
+      const preAuthAmount = requiredPreAuth || Math.ceil(borrowAmountUSD / (selectedLTV / 100));
+      const ltvRatio = selectedLTV || Math.round((borrowAmountUSD / preAuthAmount) * 100);
       const interestRate = getInterestRate(asset);
 
       // Create a mock transaction hash for demo blockchain integration
@@ -109,7 +94,9 @@ export async function POST(request: NextRequest) {
         paymentMethodId,
 
         // Loan details
-        borrowAmount: borrowAmountNum,
+        borrowAmount: borrowAmountUSD,
+        borrowAmountETH: borrowAmountETHNum,
+        ethPriceAtCreation: ethPrice,
         asset,
         interestRate,
         ltvRatio,
@@ -128,29 +115,28 @@ export async function POST(request: NextRequest) {
         txHash: mockTxHash,
       };
 
-      logBorrow("DEMO_LOAN_DATA_CREATED", { requestId, loanData });
-
       // Store the loan in our storage system
       loanStorage.createLoan(loanData);
-      logBorrow("DEMO_LOAN_STORED", { requestId, loanId });
 
       const response = {
         success: true,
         loanId,
         txHash: mockTxHash,
-        amount: borrowAmountNum,
+        amount: borrowAmountUSD,
+        amountETH: borrowAmountETHNum,
+        ethPrice: ethPrice,
         asset,
         walletAddress,
         ltvRatio,
         interestRate,
         preAuthAmount,
+        selectedLTV,
         timestamp: new Date().toISOString(),
         stripeCustomerId: customerId,
         stripePaymentMethodId: paymentMethodId,
         demoMode: true,
       };
 
-      logBorrow("DEMO_BORROW_SUCCESS", { requestId, response });
       return NextResponse.json(response);
     }
 
@@ -158,11 +144,9 @@ export async function POST(request: NextRequest) {
     // Validate pre-auth data exists
     if (!customerId || !paymentMethodId) {
       const error = "Missing Stripe customer or payment method data";
-      logBorrow("STRIPE_DATA_MISSING", { requestId, error }, true);
       return NextResponse.json({ success: false, error }, { status: 400 });
     }
 
-    logBorrow("PRODUCTION_STRIPE_PROCESSING", { requestId, loanId });
 
     try {
       // Verify customer and payment method exist in Stripe
@@ -178,17 +162,12 @@ export async function POST(request: NextRequest) {
       });
 
       // Calculate loan parameters
-      const borrowAmountNum = parseFloat(amount);
-      const preAuthAmount = requiredPreAuth || Math.ceil(borrowAmountNum / 0.8);
-      const ltvRatio = Math.round((borrowAmountNum / preAuthAmount) * 100);
+      const borrowAmountUSD = parseFloat(amount);
+      const borrowAmountETHNum = parseFloat(amountETH);
+      const preAuthAmount = requiredPreAuth || Math.ceil(borrowAmountUSD / (selectedLTV / 100));
+      const ltvRatio = selectedLTV || Math.round((borrowAmountUSD / preAuthAmount) * 100);
       const interestRate = getInterestRate(asset);
 
-      logBorrow("CREATING_PREAUTH_HOLD", {
-        requestId,
-        borrowAmount: borrowAmountNum,
-        preAuthAmount,
-        ltvRatio
-      });
 
       // Create PaymentIntent with manual capture for pre-authorization hold
       const paymentIntent = await stripe.paymentIntents.create({
@@ -205,8 +184,11 @@ export async function POST(request: NextRequest) {
         metadata: {
           loan_id: loanId,
           wallet_address: walletAddress,
-          borrow_amount: borrowAmountNum.toString(),
+          borrow_amount: borrowAmountUSD.toString(),
+          borrow_amount_eth: borrowAmountETHNum.toString(),
+          eth_price_at_creation: ethPrice.toString(),
           preauth_amount: preAuthAmount.toString(),
+          selected_ltv: selectedLTV.toString(),
           purpose: "credit_collateral_preauth",
           request_id: requestId,
         },
@@ -263,7 +245,9 @@ export async function POST(request: NextRequest) {
         paymentMethodId,
 
         // Loan details
-        borrowAmount: borrowAmountNum,
+        borrowAmount: borrowAmountUSD,
+        borrowAmountETH: borrowAmountETHNum,
+        ethPriceAtCreation: ethPrice,
         asset,
         interestRate,
         ltvRatio,
@@ -288,37 +272,27 @@ export async function POST(request: NextRequest) {
         stripePreAuthAmount: preAuthAmount,
       };
 
-      logBorrow("LOAN_DATA_CREATED", { requestId, loanData });
-
       // Store the loan in our storage system
       loanStorage.createLoan(loanData);
-      logBorrow("LOAN_STORED", { requestId, loanId });
-
-      // Verify storage worked
-      const storedLoan = loanStorage.getLoan(loanId);
-      const walletLoans = loanStorage.getWalletLoans(walletAddress);
-      logBorrow("STORAGE_VERIFICATION", {
-        requestId,
-        storedLoan: !!storedLoan,
-        walletLoansCount: walletLoans.length,
-      });
 
       const response = {
         success: true,
         loanId,
         txHash: mockTxHash,
-        amount: borrowAmountNum,
+        amount: borrowAmountUSD,
+        amountETH: borrowAmountETHNum,
+        ethPrice: ethPrice,
         asset,
         walletAddress,
         ltvRatio,
         interestRate,
         preAuthAmount,
+        selectedLTV,
         timestamp: new Date().toISOString(),
         stripeCustomerId: customer.id,
         stripePaymentMethodId: paymentMethod.id,
       };
 
-      logBorrow("BORROW_SUCCESS", { requestId, response });
       return NextResponse.json(response);
 
     } catch (stripeError: any) {
@@ -344,16 +318,6 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error: any) {
-    logBorrow(
-      "BORROW_ERROR",
-      {
-        requestId,
-        errorMessage: error.message,
-        errorStack: error.stack,
-      },
-      true
-    );
-
     return NextResponse.json(
       {
         success: false,
@@ -368,9 +332,10 @@ export async function POST(request: NextRequest) {
 // Helper function to get interest rate by asset
 function getInterestRate(asset: string): number {
   const rates: Record<string, number> = {
+    ETH: 4.5,
     USDC: 5.2,
     USDT: 4.8,
     DAI: 5.5,
   };
-  return rates[asset] || 5.0;
+  return rates[asset] || 4.5;
 }

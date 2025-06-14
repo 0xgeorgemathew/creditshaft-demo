@@ -9,7 +9,6 @@ const logCharge = createLogger("CHARGE");
 
 export async function POST(request: NextRequest) {
   const requestId = generateRequestId();
-  logCharge("CHARGE_REQUEST_START", { requestId });
 
   try {
     const { loanId, amount, reason } = await request.json();
@@ -17,55 +16,25 @@ export async function POST(request: NextRequest) {
     // Validate input
     if (!loanId) {
       const error = "Loan ID is required";
-      logCharge("VALIDATION_ERROR", { requestId, error }, true);
       return NextResponse.json({ success: false, error }, { status: 400 });
     }
 
-    // Debug: Check what loans exist in storage
-    const storageDebugInfo = loanStorage.getDebugInfo();
-    const debugInfo = {
-      requestId,
-      loanId,
-      storageInstance: !!loanStorage,
-      globalStorageExists: !!(globalThis as any).__loanStorage,
-      sameInstance: loanStorage === (globalThis as any).__loanStorage,
-      ...storageDebugInfo
-    };
-    logCharge("DEBUG_STORAGE_STATE", debugInfo);
 
     // Get loan from storage
     const loan = loanStorage.getLoan(loanId);
     if (!loan) {
       const error = "Loan not found";
-      logCharge("LOAN_NOT_FOUND", { requestId, loanId }, true);
       return NextResponse.json({ success: false, error }, { status: 404 });
     }
 
     if (loan.status !== "active") {
       const error = `Loan is not active. Current status: ${loan.status}`;
-      logCharge(
-        "INVALID_LOAN_STATUS",
-        { requestId, loanId, status: loan.status },
-        true
-      );
       return NextResponse.json({ success: false, error }, { status: 400 });
     }
 
-    logCharge("LOAN_FOUND", {
-      requestId,
-      loanId,
-      preAuthId: loan.preAuthId,
-      preAuthAmount: loan.preAuthAmount,
-      customerId: loan.customerId,
-    });
 
     // Demo mode simulation
     if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
-      logCharge("DEMO_MODE_CHARGE", {
-        requestId,
-        loanId,
-        amount: amount || loan.preAuthAmount,
-      });
 
       // Simulate processing delay
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -91,7 +60,6 @@ export async function POST(request: NextRequest) {
         requestId,
       };
 
-      logCharge("DEMO_CHARGE_SUCCESS", { requestId, response });
       return NextResponse.json(response);
     }
 
@@ -164,35 +132,24 @@ export async function POST(request: NextRequest) {
         requestId,
       };
 
-      logCharge("CHARGE_SUCCESS", { requestId, response });
       return NextResponse.json(response);
     } else {
       const error = `Charge failed with status: ${paymentIntent.status}`;
-      logCharge(
-        "CHARGE_FAILED",
-        {
-          requestId,
-          status: paymentIntent.status,
-          paymentIntentId: paymentIntent.id,
-        },
-        true
-      );
       return NextResponse.json({ success: false, error }, { status: 400 });
     }
   } catch (error: any) {
-    logCharge(
-      "CHARGE_ERROR",
-      {
-        requestId,
-        errorType: error.type || "unknown",
-        errorCode: error.code || "unknown",
-        errorMessage: error.message || "unknown",
-      },
-      true
-    );
-
     // Handle specific Stripe errors
     if (error.type === "StripeCardError") {
+      logCharge(
+        "STRIPE_CARD_ERROR",
+        {
+          requestId,
+          errorType: error.type,
+          errorCode: error.code,
+          errorMessage: error.message,
+        },
+        true
+      );
       return NextResponse.json(
         {
           success: false,
@@ -200,6 +157,19 @@ export async function POST(request: NextRequest) {
           code: error.code,
         },
         { status: 400 }
+      );
+    }
+
+    if (error.type && error.type.includes('Stripe')) {
+      logCharge(
+        "STRIPE_ERROR",
+        {
+          requestId,
+          errorType: error.type,
+          errorCode: error.code,
+          errorMessage: error.message,
+        },
+        true
       );
     }
 
