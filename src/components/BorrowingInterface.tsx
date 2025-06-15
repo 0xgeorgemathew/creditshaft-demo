@@ -35,7 +35,7 @@ export default function BorrowingInterface({
   const [preAuthAmount, setPreAuthAmount] = useState("");
   const [selectedAsset] = useState("ETH");
   const [selectedLTV, setSelectedLTV] = useState(50); // Default 50% LTV (200% collateralization)
-  const [selectedDuration, setSelectedDuration] = useState(7); // Default 7 days
+  const [selectedDuration, setSelectedDuration] = useState(168); // Default 7 days (168 hours)
   const [ethPrice, setEthPrice] = useState(3500); // Default fallback price
   const [ethPriceLoading, setEthPriceLoading] = useState(true);
   const [ethPriceSource, setEthPriceSource] = useState("loading");
@@ -132,7 +132,7 @@ export default function BorrowingInterface({
         preAuthId: preAuthData.preAuthId || "demo_preauth_id",
         requiredPreAuth: preAuthAmountValue,
         selectedLTV: actualLTV,
-        preAuthDurationDays: selectedDuration,
+        preAuthDurationDays: Math.round(selectedDuration / 24), // Convert hours to days
         originalCreditLimit: preAuthData.available_credit,
         customerId: preAuthData.customerId,
         paymentMethodId: preAuthData.paymentMethodId,
@@ -450,9 +450,7 @@ export default function BorrowingInterface({
                     background: `linear-gradient(to right, 
                       #10b981 0%, 
                       #10b981 ${((selectedLTV - 30) / (66.67 - 30)) * 100}%, 
-                      rgba(255,255,255,0.2) ${
-                        ((selectedLTV - 30) / (66.67 - 30)) * 100
-                      }%, 
+                      rgba(255,255,255,0.2) ${((selectedLTV - 30) / (66.67 - 30)) * 100}%, 
                       rgba(255,255,255,0.2) 100%)`,
                   }}
                 />
@@ -517,104 +515,103 @@ export default function BorrowingInterface({
               Pre-Authorization Duration
             </label>
             <div className="glassmorphism rounded-xl p-4 border border-white/20">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-gray-300">Duration:</span>
                 <span className="text-lg font-semibold text-white">
-                  {selectedDuration === 1
-                    ? "1 Day"
-                    : selectedDuration === 7
-                    ? "7 Days"
-                    : selectedDuration === 30
-                    ? "1 Month"
-                    : `${selectedDuration} Days`}
+                  {Math.round(selectedDuration / 24)} Day{Math.round(selectedDuration / 24) !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-xs text-gray-400">Hours:</span>
+                <span className="text-xs text-white font-medium">
+                  {selectedDuration}h
+                </span>
+              </div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-400">Quick</span>
+                <span className="text-xs text-gray-400">
+                  Maximum
                 </span>
               </div>
 
               <div className="relative">
                 <input
                   type="range"
-                  min="1"
-                  max="30"
+                  min="24"
+                  max="168"
+                  step="12"
                   value={selectedDuration}
                   onChange={(e) => {
                     const value = parseInt(e.target.value);
-                    // Snap to preset values
-                    if (value <= 3) setSelectedDuration(1);
-                    else if (value <= 18) setSelectedDuration(7);
-                    else setSelectedDuration(30);
+                    setSelectedDuration(value);
                   }}
                   className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider-thumb"
                   style={{
                     background: `linear-gradient(to right, 
-                      #3b82f6 0%, 
-                      #3b82f6 ${
-                        ((selectedDuration === 1
-                          ? 1
-                          : selectedDuration === 7
-                          ? 7
-                          : 30) /
-                          30) *
-                        100
-                      }%, 
-                      rgba(255,255,255,0.2) ${
-                        ((selectedDuration === 1
-                          ? 1
-                          : selectedDuration === 7
-                          ? 7
-                          : 30) /
-                          30) *
-                        100
-                      }%, 
-                      rgba(255,255,255,0.2) 100%)`,
+                      ${selectedDuration <= 48 
+                        ? '#10b981' 
+                        : selectedDuration <= 120 
+                        ? '#3b82f6' 
+                        : '#f59e0b'} 0%, 
+                      ${selectedDuration <= 48 
+                        ? '#10b981' 
+                        : selectedDuration <= 120 
+                        ? '#3b82f6' 
+                        : '#f59e0b'} ${((selectedDuration - 24) / (168 - 24)) * 100}%, 
+                      rgba(255,255,255,0.2) ${((selectedDuration - 24) / (168 - 24)) * 100}%, 
+                      rgba(255,255,255,0.2) 100%)`
                   }}
                 />
-                <div className="flex justify-between mt-2 text-xs text-gray-400">
-                  <button
-                    onClick={() => setSelectedDuration(1)}
-                    className={`px-2 py-1 rounded transition-colors ${
-                      selectedDuration === 1
-                        ? "text-blue-300 bg-blue-500/20"
-                        : "hover:text-white"
-                    }`}
-                  >
-                    1 Day
-                  </button>
-                  <button
-                    onClick={() => setSelectedDuration(7)}
-                    className={`px-2 py-1 rounded transition-colors ${
-                      selectedDuration === 7
-                        ? "text-blue-300 bg-blue-500/20"
-                        : "hover:text-white"
-                    }`}
-                  >
-                    7 Days
-                  </button>
-                  <button
-                    onClick={() => setSelectedDuration(30)}
-                    className={`px-2 py-1 rounded transition-colors ${
-                      selectedDuration === 30
-                        ? "text-blue-300 bg-blue-500/20"
-                        : "hover:text-white"
-                    }`}
-                  >
-                    1 Month
-                  </button>
-                </div>
+              </div>
+
+              <div className="flex justify-between mt-2 text-xs text-gray-400">
+                <button
+                  onClick={() => setSelectedDuration(24)}
+                  className={`px-2 py-1 rounded transition-colors ${
+                    selectedDuration === 24
+                      ? "text-emerald-300 bg-emerald-500/20"
+                      : "hover:text-white"
+                  }`}
+                >
+                  1 Day
+                </button>
+                <button
+                  onClick={() => setSelectedDuration(72)}
+                  className={`px-2 py-1 rounded transition-colors ${
+                    selectedDuration === 72
+                      ? "text-blue-300 bg-blue-500/20"
+                      : "hover:text-white"
+                  }`}
+                >
+                  3 Days
+                </button>
+                <button
+                  onClick={() => setSelectedDuration(168)}
+                  className={`px-2 py-1 rounded transition-colors ${
+                    selectedDuration === 168
+                      ? "text-amber-300 bg-amber-500/20"
+                      : "hover:text-white"
+                  }`}
+                >
+                  7 Days
+                </button>
               </div>
 
               <div className="mt-3 text-xs text-gray-400 space-y-1">
                 <div className="flex items-center gap-2">
-                  <Info size={12} className="text-blue-400" />
+                  <Lightbulb size={12} className="text-blue-400" />
+                  <span>Shorter duration = Lower risk and better security</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <BarChart3 size={12} className="text-green-400" />
                   <span>
-                    Pre-authorization will automatically expire after this
-                    duration
+                    Current selection: {Math.round(selectedDuration / 24)} day{Math.round(selectedDuration / 24) !== 1 ? 's' : ''} ({selectedDuration} hours)
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <AlertCircle size={12} className="text-amber-400" />
                   <span>
-                    You must charge or release before expiry to avoid automatic
-                    cancellation
+                    Pre-authorization expires automatically after this period
                   </span>
                 </div>
               </div>
