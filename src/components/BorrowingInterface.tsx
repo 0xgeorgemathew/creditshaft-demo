@@ -448,8 +448,16 @@ export default function BorrowingInterface({
                   className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider-thumb"
                   style={{
                     background: `linear-gradient(to right, 
-                      #10b981 0%, 
-                      #10b981 ${((selectedLTV - 30) / (66.67 - 30)) * 100}%, 
+                      ${selectedLTV <= 40 
+                        ? '#10b981' 
+                        : selectedLTV <= 55 
+                        ? '#3b82f6' 
+                        : '#f59e0b'} 0%, 
+                      ${selectedLTV <= 40 
+                        ? '#10b981' 
+                        : selectedLTV <= 55 
+                        ? '#3b82f6' 
+                        : '#f59e0b'} ${((selectedLTV - 30) / (66.67 - 30)) * 100}%, 
                       rgba(255,255,255,0.2) ${((selectedLTV - 30) / (66.67 - 30)) * 100}%, 
                       rgba(255,255,255,0.2) 100%)`,
                   }}
