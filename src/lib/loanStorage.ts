@@ -52,6 +52,11 @@ class LoanStorage {
     return true;
   }
 
+  // Update loan status (simplified method)
+  updateLoanStatus(loanId: string, status: Loan['status']): boolean {
+    return this.updateLoan(loanId, { status });
+  }
+
   // Calculate credit summary for a wallet
   getCreditSummary(walletAddress: string): CreditSummary {
     const loans = this.getWalletLoans(walletAddress);

@@ -2,7 +2,7 @@
 // src/components/LoanDashboard.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Loan, CreditSummary } from "@/types";
 import {
   CreditCard,
@@ -19,6 +19,8 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
+import { useLoanStatus } from "@/hooks/useLoan";
+import { useContractOperations } from "@/hooks/useContract";
 
 interface LoanDashboardProps {
   walletAddress: string;
@@ -115,6 +117,7 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
   const [timeRemaining, setTimeRemaining] = useState<string>("");
   const [currentInterest, setCurrentInterest] = useState(0);
   const [progressPercentage, setProgressPercentage] = useState(0);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Calculate real-time countdown and interest
   useEffect(() => {
@@ -125,7 +128,10 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
       const createdTime = new Date(loan.createdAt).getTime();
       
       const updateRealTimeData = () => {
-        const now = Date.now(); // Use Date.now() for better performance
+        if (isUpdating) return; // Prevent overlapping updates
+        
+        setIsUpdating(true);
+        const now = Date.now();
 
         // Calculate precise time elapsed since loan creation in milliseconds
         const timeElapsedMs = now - createdTime;
@@ -133,7 +139,11 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
 
         // Calculate real-time accrued interest with pre-calculated rate
         const realTimeInterest = loan.borrowAmount * secondlyRate * timeElapsedSeconds;
-        setCurrentInterest(realTimeInterest);
+        
+        // Only update if there's a meaningful change (reduce re-renders)
+        if (Math.abs(realTimeInterest - currentInterest) > 0.01) {
+          setCurrentInterest(realTimeInterest);
+        }
 
         // Update countdown timer if expiry date exists
         if (loan.preAuthExpiresAt) {
@@ -150,14 +160,17 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
             );
             const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
 
-            if (days > 0) {
-              setTimeRemaining(`${days}d ${hours}h ${minutes}m ${seconds}s`);
-            } else if (hours > 0) {
-              setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
-            } else if (minutes > 0) {
-              setTimeRemaining(`${minutes}m ${seconds}s`);
-            } else {
-              setTimeRemaining(`${seconds}s`);
+            const newTimeRemaining = days > 0 
+              ? `${days}d ${hours}h ${minutes}m`
+              : hours > 0 
+              ? `${hours}h ${minutes}m`
+              : minutes > 0 
+              ? `${minutes}m ${seconds}s`
+              : `${seconds}s`;
+
+            // Only update if time display changes
+            if (newTimeRemaining !== timeRemaining) {
+              setTimeRemaining(newTimeRemaining);
             }
 
             // Simplified progress calculation as percentage of time REMAINING
@@ -169,27 +182,31 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
 
             if (totalDuration > 0 && timeDiff > 0) {
               progress = (timeDiff / totalDuration) * 100;
-              // Ensure progress is within valid range (0.01% to 99.99%)
               progress = Math.max(Math.min(progress, 99.99), 0.01);
             } else if (timeDiff <= 0) {
-              progress = 100; // Expired
+              progress = 100;
             }
 
-            setProgressPercentage(progress);
-
-            // Animation trigger for smooth updates
+            // Only update progress if it changed by more than 1%
+            if (Math.abs(progress - progressPercentage) > 1) {
+              setProgressPercentage(progress);
+            }
           } else {
-            setTimeRemaining("EXPIRED");
-            setProgressPercentage(100);
+            if (timeRemaining !== "EXPIRED") {
+              setTimeRemaining("EXPIRED");
+              setProgressPercentage(100);
+            }
           }
         }
+        
+        setTimeout(() => setIsUpdating(false), 100);
       };
 
       // Update immediately
       updateRealTimeData();
 
-      // Update every 1000ms (1 second) for better performance
-      const interval = setInterval(updateRealTimeData, 1000);
+      // Update every 10000ms (10 seconds) to reduce stuttering
+      const interval = setInterval(updateRealTimeData, 10000);
 
       return () => clearInterval(interval);
     }
@@ -200,6 +217,9 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
     loan.createdAt,
     loan.borrowAmount,
     loan.interestRate,
+    // Exclude frequently changing values to prevent constant re-renders
+    // currentInterest, progressPercentage, timeRemaining, isUpdating
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
 
   const getStatusColor = (status: string) => {
@@ -246,10 +266,10 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
     
     setDaysActive(calculateDaysActive());
     
-    // Update every minute to keep it relatively current
+    // Update every 5 minutes to reduce re-renders
     const interval = setInterval(() => {
       setDaysActive(calculateDaysActive());
-    }, 60000);
+    }, 300000);
     
     return () => clearInterval(interval);
   }, [loan.createdAt]);
@@ -276,7 +296,7 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
                 )}
               </div>
             )}
-            <p className="text-sm text-gray-400 font-mono">#{loan.id.slice(-8)}</p>
+            <p className="text-sm text-gray-400 font-mono">Loan #{loan.id.slice(-8)}</p>
           </div>
         </div>
 
@@ -350,10 +370,10 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
             <div className="space-y-3">
               <div className="flex items-end justify-between">
                 <div>
-                  <p className="text-white text-2xl font-mono font-bold">
+                  <p className="text-white text-2xl font-mono font-bold min-w-[140px]">
                     ${currentInterest.toFixed(6)}
                   </p>
-                  <p className="text-amber-200 text-sm">
+                  <p className="text-amber-200 text-sm min-w-[120px]">
                     +${secondlyInterest.toFixed(8)}/second
                   </p>
                 </div>
@@ -497,14 +517,14 @@ function LoanCard({ loan, onCharge, onRelease, isProcessing }: LoanCardProps) {
           <button
             onClick={() => onCharge(loan.id)}
             disabled={isProcessing}
-            className="flex-1 glassmorphism border border-red-500/30 bg-gradient-to-r from-red-500/10 to-red-600/10 hover:from-red-500/20 hover:to-red-600/20 text-red-300 hover:text-red-200 py-4 px-6 rounded-xl font-bold disabled:opacity-50 transition-all flex items-center justify-center gap-3 shadow-lg hover:shadow-xl"
+            className="flex-1 glassmorphism border border-blue-500/30 bg-gradient-to-r from-blue-500/10 to-blue-600/10 hover:from-blue-500/20 hover:to-blue-600/20 text-blue-300 hover:text-blue-200 py-4 px-6 rounded-xl font-bold disabled:opacity-50 transition-all flex items-center justify-center gap-3 shadow-lg hover:shadow-xl"
           >
             {isProcessing ? (
               <Loader className="animate-spin" size={18} />
             ) : (
               <Zap size={18} />
             )}
-            Charge Card
+            Repay Loan
           </button>
           <button
             onClick={() => onRelease(loan.id)}
@@ -615,14 +635,46 @@ function CreditSummaryCard({
 
 // Main dashboard component
 export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
-  const [loans, setLoans] = useState<Loan[]>([]);
-  const [creditSummary, setCreditSummary] = useState<CreditSummary | null>(
-    null
-  );
-  const [isLoading, setIsLoading] = useState(true);
+  const { loanInfo, loading: contractLoading, refetch } = useLoanStatus();
+  const { repayLoan } = useContractOperations();
   const [processingLoanId, setProcessingLoanId] = useState<string | null>(null);
-  const [error, setError] = useState("");
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
+
+  // Convert simplified loan data to our Loan interface
+  const loans: Loan[] = loanInfo?.hasLoan && loanInfo.loanIds ? 
+    loanInfo.loanIds.map((loanId, index) => ({
+      id: loanId,
+      preAuthId: "contract_preauth",
+      walletAddress,
+      customerId: "",
+      paymentMethodId: "",
+      borrowAmount: parseFloat(loanInfo.principal) * 3500, // Convert ETH to USD using mock price
+      borrowAmountETH: parseFloat(loanInfo.principal),
+      ethPriceAtCreation: 3500,
+      asset: "ETH",
+      interestRate: 10,
+      ltvRatio: 50,
+      originalCreditLimit: 5000,
+      preAuthAmount: parseFloat(loanInfo.principal) * 3500 * 2, // 200% collateral
+      status: loanInfo.expired ? "defaulted" : "active",
+      createdAt: new Date().toISOString(),
+      preAuthCreatedAt: new Date().toISOString(),
+      preAuthExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      txHash: ""
+    })) : [];
+
+  const creditSummary: CreditSummary | null = loanInfo?.hasLoan ? {
+    totalCreditLimit: 5000,
+    totalBorrowed: parseFloat(loanInfo.principal) * 3500,
+    totalCharged: 0,
+    totalReleased: 0,
+    availableCredit: 5000 - (parseFloat(loanInfo.principal) * 3500),
+    utilizationPercentage: (parseFloat(loanInfo.principal) * 3500 / 5000) * 100,
+    activeLoans: 1
+  } : null;
+
+  const isLoading = contractLoading;
+  const error = ""; // Simplified error handling
 
   // Toast management functions with stable ID generation
   const addToast = (type: 'success' | 'error' | 'info', title: string, message: string) => {
@@ -635,53 +687,20 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   };
 
-  const fetchLoans = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError("");
-
-      const response = await fetch(
-        `/api/loans?wallet=${encodeURIComponent(walletAddress)}`
-      );
-      const data = await response.json();
-
-      if (data.success) {
-        setLoans(data.loans);
-        setCreditSummary(data.creditSummary);
-      } else {
-        setError(data.error || "Failed to fetch loans");
-      }
-    } catch {
-      setError("Network error while fetching loans");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [walletAddress]);
-
   const handleCharge = async (loanId: string) => {
-    addToast('info', 'Processing...', 'Charging loan and capturing pre-authorization on credit card.');
+    addToast('info', 'Processing...', 'Repaying loan and releasing pre-authorization.');
     
     setProcessingLoanId(loanId);
     try {
-      const response = await fetch("/api/loans/charge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          loanId,
-          reason: "Manual charge from dashboard",
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        addToast('success', 'Loan Charged Successfully!', `Charge ID: ${data.chargeId}. Pre-authorization has been captured.`);
-        await fetchLoans(); // Refresh data
-      } else {
-        addToast('error', 'Charge Failed', data.error || 'Failed to charge the loan. Please try again.');
-      }
-    } catch {
-      addToast('error', 'Network Error', 'Unable to process charge operation. Check your connection and try again.');
+      // Step 1: Repay the specific loan on blockchain (now requires loan ID)
+      const receipt = await repayLoan(loanId);
+      
+      // Step 2: Release the Stripe pre-authorization (already handled in repayLoan function)
+      addToast('success', 'Loan Repaid Successfully!', `Loan ID: ${loanId.substring(0, 8)}... Transaction: ${receipt.transactionHash.substring(0, 10)}... Pre-authorization has been released.`);
+      
+      await refetch(); // Refresh blockchain data
+    } catch (error) {
+      addToast('error', 'Repayment Failed', (error as Error).message || 'Failed to repay the loan. Please try again.');
     } finally {
       setProcessingLoanId(null);
     }
@@ -705,7 +724,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
 
       if (data.success) {
         addToast('success', 'Loan Released Successfully!', 'Pre-authorization hold has been canceled. No charges will occur.');
-        await fetchLoans(); // Refresh data
+        await refetch(); // Refresh data
       } else {
         addToast('error', 'Release Failed', data.error || 'Failed to release the loan. Please try again.');
       }
@@ -718,9 +737,9 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
 
   useEffect(() => {
     if (walletAddress) {
-      fetchLoans();
+      refetch();
     }
-  }, [walletAddress, fetchLoans]);
+  }, [walletAddress, refetch]);
 
   if (isLoading && loans.length === 0) {
     return (
@@ -743,7 +762,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
           <h2 className="text-3xl font-bold gradient-text">Loan Management</h2>
         </div>
         <button
-          onClick={fetchLoans}
+          onClick={refetch}
           disabled={isLoading}
           className="glassmorphism hover:bg-white/10 text-white px-4 py-2 rounded-lg transition-all flex items-center gap-2 border border-white/10"
         >

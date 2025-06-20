@@ -20,6 +20,7 @@ import {
   Zap,
 } from "lucide-react";
 import { calculateLiquidationPrice, getRiskLevel, getCollateralizationRatio } from "@/lib/chainlink-price";
+import { useContractOperations } from "@/hooks/useContract";
 
 interface BorrowingInterfaceProps {
   preAuthData: PreAuthData;
@@ -32,6 +33,7 @@ export default function BorrowingInterface({
   walletAddress,
   onBorrowSuccess,
 }: BorrowingInterfaceProps) {
+  const { borrowETH, loading: contractLoading, error: contractError } = useContractOperations();
   const [preAuthAmount, setPreAuthAmount] = useState("");
   const [selectedAsset] = useState("ETH");
   const [selectedLTV, setSelectedLTV] = useState(50); // Default 50% LTV (200% collateralization)
@@ -41,6 +43,7 @@ export default function BorrowingInterface({
   const [ethPriceSource, setEthPriceSource] = useState("loading");
   const [lastPriceUpdate, setLastPriceUpdate] = useState<Date | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const isLoading = isProcessing || contractLoading;
   const [borrowSuccess, setBorrowSuccess] = useState(false);
   const [txHash, setTxHash] = useState("");
   const [loanId, setLoanId] = useState("");
@@ -122,7 +125,7 @@ export default function BorrowingInterface({
     setIsProcessing(true);
 
     try {
-      // Enhanced request data with all required fields
+      // Simplified borrowing flow
       const requestData = {
         amount: borrowAmountUSD,
         amountETH: borrowAmountETH,
@@ -132,14 +135,15 @@ export default function BorrowingInterface({
         preAuthId: preAuthData.preAuthId || "demo_preauth_id",
         requiredPreAuth: preAuthAmountValue,
         selectedLTV: actualLTV,
-        preAuthDurationDays: Math.round(selectedDuration / 24), // Convert hours to days
-        originalCreditLimit: preAuthData.available_credit,
+        preAuthDurationMinutes: selectedDuration * 60,
         customerId: preAuthData.customerId,
         paymentMethodId: preAuthData.paymentMethodId,
         setupIntentId: preAuthData.setupIntentId,
         cardLastFour: preAuthData.card_last_four,
         cardBrand: preAuthData.card_brand,
       };
+
+      console.log("Creating loan...", requestData);
 
       const response = await fetch("/api/borrow", {
         method: "POST",
@@ -150,17 +154,35 @@ export default function BorrowingInterface({
       });
 
       const data = await response.json();
+      console.log("Borrow response:", data);
 
-      if (data.success) {
+      if (!data.success) {
+        throw new Error(data.error || "Borrow request failed");
+      }
+
+      // Call smart contract if needed
+      if (data.contractParams) {
+        console.log("Calling smart contract...");
+        
+        const receipt = await borrowETH(data.contractParams);
+        console.log("Contract transaction successful:", receipt);
+
+        setTxHash(receipt.transactionHash);
+        setLoanId(data.loanId);
+        setBorrowSuccess(true);
+        setCountdown(3);
+      } else {
+        // Demo mode response
         setTxHash(data.txHash || data.loanId);
         setLoanId(data.loanId || "unknown");
         setBorrowSuccess(true);
-        setCountdown(3); // Reset countdown
-      } else {
-        throw new Error(data.error || "Borrowing failed");
+        setCountdown(3);
       }
     } catch (error) {
-      alert("Borrowing failed: " + (error as Error).message);
+      console.error("Borrowing failed:", error);
+      const errorMessage = (error as Error).message;
+      
+      alert("Borrowing failed: " + errorMessage);
     } finally {
       setIsProcessing(false);
     }
@@ -703,11 +725,11 @@ export default function BorrowingInterface({
               !preAuthAmount ||
               preAuthAmountValue <= 0 ||
               preAuthAmountValue > preAuthData.available_credit ||
-              isProcessing
+              isLoading
             }
             className="w-full btn-gradient text-white py-4 px-6 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 flex items-center justify-center gap-3 shadow-lg"
           >
-            {isProcessing ? (
+            {isLoading ? (
               <>
                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
                 Processing Loan...

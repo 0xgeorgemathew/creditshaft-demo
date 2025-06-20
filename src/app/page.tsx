@@ -9,10 +9,11 @@ import StripePreAuth from "@/components/StripePreAuth";
 import PreAuthStatus from "@/components/PreAuthStatus";
 import BorrowingInterface from "@/components/BorrowingInterface";
 import LoanDashboard from "@/components/LoanDashboard";
+import LiquidityProvider from "@/components/LiquidityProvider";
 import NetworkSwitcher from "@/components/NetworkSwitcher";
 import WalletAddress from "@/components/WalletAddress";
 import { PreAuthData, Loan } from "@/types";
-import { Zap, Shield, TrendingUp, Sparkles, CreditCard } from "lucide-react";
+import { Zap, Shield, TrendingUp, Sparkles, CreditCard, Droplets } from "lucide-react";
 
 // Key for session storage (in-memory)
 const PREAUTH_STORAGE_KEY = "creditshaft_preauth_data";
@@ -23,7 +24,7 @@ export default function Home() {
   const [showBorrowing, setShowBorrowing] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    "overview" | "borrow" | "manage" | "setup"
+    "overview" | "borrow" | "manage" | "setup" | "liquidity"
   >("overview");
   const [hasActiveLoans, setHasActiveLoans] = useState(false);
   const [sessionStorageCount, setSessionStorageCount] = useState(0);
@@ -339,9 +340,9 @@ export default function Home() {
           {isConnected && address && (
             <div className="transform transition-all duration-500 animate-fade-in">
               {!preAuthData ? (
-                /* Welcome Overview - No Credit Card Setup Yet */
+                /* Welcome Overview - Choose between Liquidity and Borrowing */
                 <div className="glassmorphism rounded-2xl shadow-2xl p-8 border border-white/20">
-                  <div className="text-center">
+                  <div className="text-center mb-8">
                     <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
                       <Shield className="text-white" size={32} />
                     </div>
@@ -349,53 +350,78 @@ export default function Home() {
                       Welcome to CreditShaft! 👋
                     </h2>
                     <p className="text-gray-300 text-lg mb-6 max-w-2xl mx-auto">
-                      To start borrowing crypto against your credit card,
-                      you&apos;ll need to set up a secure pre-authorization.
-                      This allows us to hold funds on your card without charging
-                      until needed.
+                      Choose how you want to participate in the CreditShaft ecosystem:
                     </p>
+                  </div>
 
-                    <div className="grid md:grid-cols-3 gap-6 mb-8">
-                      <div className="bg-white/5 rounded-xl p-4">
-                        <div className="text-2xl mb-2">🔒</div>
-                        <h3 className="font-semibold text-white mb-2">
-                          Secure Setup
-                        </h3>
-                        <p className="text-gray-300 text-sm">
-                          Your card info is encrypted and never stored on our
-                          servers
-                        </p>
+                  <div className="grid md:grid-cols-2 gap-8 mb-8">
+                    {/* Borrow Option */}
+                    <div className="group bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-2xl p-6 hover:from-blue-500/15 hover:to-purple-500/15 transition-all duration-300 cursor-pointer"
+                         onClick={() => setActiveTab("setup")}>
+                      <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center mb-4">
+                        <CreditCard className="text-white" size={24} />
                       </div>
-                      <div className="bg-white/5 rounded-xl p-4">
-                        <div className="text-2xl mb-2">⚡</div>
-                        <h3 className="font-semibold text-white mb-2">
-                          Instant Loans
-                        </h3>
-                        <p className="text-gray-300 text-sm">
-                          Borrow crypto instantly with up to 80% LTV ratio
-                        </p>
+                      <h3 className="text-xl font-bold text-white mb-3">
+                        Borrow Crypto
+                      </h3>
+                      <p className="text-gray-300 mb-4 leading-relaxed">
+                        Use your credit card as collateral to borrow crypto instantly. No KYC required.
+                      </p>
+                      <div className="space-y-2 mb-6">
+                        <div className="flex items-center gap-2 text-sm text-gray-300">
+                          <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
+                          Up to 66.7% LTV ratio
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-300">
+                          <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
+                          Instant borrowing
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-300">
+                          <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
+                          Competitive rates
+                        </div>
                       </div>
-                      <div className="bg-white/5 rounded-xl p-4">
-                        <div className="text-2xl mb-2">💳</div>
-                        <h3 className="font-semibold text-white mb-2">
-                          No Charges
-                        </h3>
-                        <p className="text-gray-300 text-sm">
-                          Only charged if you don&apos;t repay by expiry date
-                        </p>
-                      </div>
+                      <button className="w-full btn-gradient text-white py-3 px-6 rounded-xl font-semibold transition-all transform group-hover:scale-105">
+                        Set Up Credit Card
+                      </button>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        // Show the credit card setup
-                        setActiveTab("setup");
-                      }}
-                      className="btn-gradient text-white py-4 px-8 rounded-xl font-bold text-lg shadow-lg hover:shadow-2xl transition-all transform hover:scale-105 flex items-center justify-center gap-3 mx-auto"
-                    >
-                      <CreditCard size={20} />
-                      Set Up Credit Card
-                    </button>
+                    {/* Liquidity Provider Option */}
+                    <div className="group bg-gradient-to-br from-green-500/10 to-cyan-500/10 border border-green-500/20 rounded-2xl p-6 hover:from-green-500/15 hover:to-cyan-500/15 transition-all duration-300 cursor-pointer"
+                         onClick={() => setActiveTab("liquidity")}>
+                      <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-cyan-500 rounded-xl flex items-center justify-center mb-4">
+                        <Droplets className="text-white" size={24} />
+                      </div>
+                      <h3 className="text-xl font-bold text-white mb-3">
+                        Provide Liquidity
+                      </h3>
+                      <p className="text-gray-300 mb-4 leading-relaxed">
+                        Add ETH to the lending pool and earn interest from borrowers.
+                      </p>
+                      <div className="space-y-2 mb-6">
+                        <div className="flex items-center gap-2 text-sm text-gray-300">
+                          <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                          Earn interest on deposits
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-300">
+                          <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                          Withdraw anytime
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-300">
+                          <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                          LP token rewards
+                        </div>
+                      </div>
+                      <button className="w-full bg-gradient-to-r from-green-500 to-cyan-500 text-white py-3 px-6 rounded-xl font-semibold transition-all transform group-hover:scale-105">
+                        Add Liquidity
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="text-center">
+                    <p className="text-gray-400 text-sm">
+                      You can switch between these options at any time
+                    </p>
                   </div>
                 </div>
               ) : (
@@ -437,6 +463,17 @@ export default function Home() {
                         <CreditCard size={16} />
                         Manage Loans
                       </button>
+                      <button
+                        onClick={() => setActiveTab("liquidity")}
+                        className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                          activeTab === "liquidity"
+                            ? "bg-gradient-to-r from-green-500 to-cyan-500 text-white"
+                            : "text-gray-300 hover:text-white hover:bg-white/10"
+                        }`}
+                      >
+                        <Droplets size={16} />
+                        Liquidity
+                      </button>
                     </div>
                   </div>
 
@@ -460,6 +497,10 @@ export default function Home() {
                   {activeTab === "manage" && (
                     <LoanDashboard walletAddress={address} />
                   )}
+
+                  {activeTab === "liquidity" && (
+                    <LiquidityProvider walletAddress={address} />
+                  )}
                 </>
               )}
 
@@ -469,6 +510,11 @@ export default function Home() {
                   walletAddress={address}
                   onPreAuthSuccess={handlePreAuthSuccess}
                 />
+              )}
+
+              {/* Liquidity Tab (available even without preAuth) */}
+              {activeTab === "liquidity" && !preAuthData && (
+                <LiquidityProvider walletAddress={address} />
               )}
             </div>
           )}
