@@ -65,8 +65,6 @@ class LoanStorage {
       return {
         totalCreditLimit: 0,
         totalBorrowed: 0,
-        totalCharged: 0,
-        totalReleased: 0,
         availableCredit: 0,
         utilizationPercentage: 0,
         activeLoans: 0,
@@ -78,18 +76,8 @@ class LoanStorage {
     const totalCreditLimit = loans[0]?.originalCreditLimit || 0;
 
     const activeLoans = loans.filter((loan) => loan.status === "active");
-    const chargedLoans = loans.filter((loan) => loan.status === "charged");
-    const releasedLoans = loans.filter((loan) => loan.status === "released");
 
     const totalBorrowed = activeLoans.reduce(
-      (sum, loan) => sum + loan.borrowAmount,
-      0
-    );
-    const totalCharged = chargedLoans.reduce(
-      (sum, loan) => sum + (loan.actualChargedAmount || loan.preAuthAmount),
-      0
-    );
-    const totalReleased = releasedLoans.reduce(
       (sum, loan) => sum + loan.borrowAmount,
       0
     );
@@ -107,8 +95,6 @@ class LoanStorage {
     const summary = {
       totalCreditLimit,
       totalBorrowed,
-      totalCharged,
-      totalReleased,
       availableCredit,
       utilizationPercentage: Math.round(utilizationPercentage * 100) / 100,
       activeLoans: activeLoans.length,

@@ -1,4 +1,3 @@
-/* eslint-disable react/no-unescaped-entities */
 // src/components/LoanDashboard.tsx
 "use client";
 
@@ -21,7 +20,6 @@ import {
   Loader,
   Eye,
   Zap,
-  RefreshCw,
   X,
   CreditCard,
 } from "lucide-react";
@@ -36,7 +34,7 @@ interface LoanDashboardProps {
 
 interface LoanCardProps {
   loan: Loan;
-  onCharge: (loanId: string) => void;
+  onRepay: (loanId: string) => void;
   isProcessing: boolean;
   loanInfo?: {
     lastUpdated?: number;
@@ -195,10 +193,15 @@ function BlockchainDataDisplay({
         calculatedValue = preciseInterest;
       }
       
-      // Use blockchain value as base if significantly different, otherwise use calculated
-      const baseValue = Math.abs(displayValue - calculatedValue) > (principalAmount * 0.01) ? displayValue : calculatedValue;
+      // Ensure smooth one-directional updates: always use the higher value between current and calculated
+      // This prevents fluctuation while ensuring values only increase over time
+      const minValue = isRepaymentTotal ? principalAmount : 0;
+      const newValue = Math.max(minValue, Math.max(realTimeValue, calculatedValue));
       
-      setRealTimeValue(Math.max(isRepaymentTotal ? principalAmount : 0, baseValue));
+      // Only update if the new value is actually higher (prevents backward movement)
+      if (newValue > realTimeValue || Math.abs(newValue - realTimeValue) < 0.000001) {
+        setRealTimeValue(newValue);
+      }
     };
 
     // Initial calculation
@@ -208,14 +211,14 @@ function BlockchainDataDisplay({
     const interval = setInterval(calculatePreciseValue, 1000);
 
     return () => clearInterval(interval);
-  }, [displayValue, loanCreatedAt, principalAmount, annualRate, isRepaymentTotal]);
+  }, [displayValue, loanCreatedAt, principalAmount, annualRate, isRepaymentTotal, realTimeValue]);
 
-  // Reset when blockchain data updates
+  // Handle blockchain data updates - only update if blockchain value is higher
   useEffect(() => {
-    if (lastUpdated) {
+    if (lastUpdated && displayValue > realTimeValue) {
       setRealTimeValue(displayValue);
     }
-  }, [lastUpdated, displayValue]);
+  }, [lastUpdated, displayValue, realTimeValue]);
 
   // Determine appropriate decimal places based on value magnitude
   const adaptiveDecimals = realTimeValue < 0.01 ? Math.max(decimals, 8) : 
@@ -240,7 +243,7 @@ function BlockchainDataDisplay({
 const LoanCard = memo(
   function LoanCard({
     loan,
-    onCharge,
+    onRepay,
     isProcessing,
     loanInfo,
   }: LoanCardProps) {
@@ -305,10 +308,10 @@ const LoanCard = memo(
       switch (status) {
         case "active":
           return "text-emerald-300 bg-gradient-to-r from-emerald-500/10 to-green-500/10 border-emerald-500/20 glassmorphism";
-        case "charged":
-          return "text-rose-300 bg-gradient-to-r from-rose-500/10 to-red-500/10 border-rose-500/20 glassmorphism";
-        case "released":
+        case "repaid":
           return "text-cyan-300 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border-cyan-500/20 glassmorphism";
+        case "defaulted":
+          return "text-rose-300 bg-gradient-to-r from-rose-500/10 to-red-500/10 border-rose-500/20 glassmorphism";
         default:
           return "text-slate-300 bg-gradient-to-r from-slate-500/10 to-gray-500/10 border-slate-500/20 glassmorphism";
       }
@@ -318,10 +321,10 @@ const LoanCard = memo(
       switch (status) {
         case "active":
           return <Clock size={16} />;
-        case "charged":
-          return <XCircle size={16} />;
-        case "released":
+        case "repaid":
           return <CheckCircle size={16} />;
+        case "defaulted":
+          return <XCircle size={16} />;
         default:
           return <AlertCircle size={16} />;
       }
@@ -455,11 +458,11 @@ const LoanCard = memo(
                   </div>
                   <div className="flex-1"></div>
                   <div className="flex items-center gap-3">
-                    <div className="glassmorphism rounded-lg p-2 border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-green-500/10">
-                      <CreditCard size={18} className="text-emerald-300" />
+                    <div className="glassmorphism rounded-lg p-2 border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-cyan-500/10">
+                      <CreditCard size={18} className="text-blue-300" />
                     </div>
                     <div>
-                      <p className="font-semibold text-emerald-300 text-sm">
+                      <p className="font-semibold text-blue-300 text-sm">
                         Pre-Auth Amount
                       </p>
                       <p className="font-bold text-white text-lg">
@@ -518,19 +521,11 @@ const LoanCard = memo(
                   </p>
                 </div>
               )}
-              {loan.chargedAt && (
+              {loan.repaidAt && (
                 <div>
-                  <p className="text-gray-400 mb-1">Charged</p>
+                  <p className="text-gray-400 mb-1">Repaid</p>
                   <p className="text-white font-mono">
-                    {formatDate(loan.chargedAt)}
-                  </p>
-                </div>
-              )}
-              {loan.releasedAt && (
-                <div>
-                  <p className="text-gray-400 mb-1">Released</p>
-                  <p className="text-white font-mono">
-                    {formatDate(loan.releasedAt)}
+                    {formatDate(loan.repaidAt)}
                   </p>
                 </div>
               )}
@@ -549,7 +544,7 @@ const LoanCard = memo(
         {loan.status === "active" && (
           <div className="flex gap-3 pt-2">
             <button
-              onClick={() => onCharge(loan.id)}
+              onClick={() => onRepay(loan.id)}
               disabled={isProcessing}
               className="w-full glassmorphism border border-blue-500/30 bg-gradient-to-r from-blue-500/10 to-blue-600/10 hover:from-blue-500/20 hover:to-blue-600/20 text-blue-300 hover:text-blue-200 py-4 px-6 rounded-xl font-bold disabled:opacity-50 transition-all flex items-center justify-center gap-3 shadow-lg hover:shadow-xl"
             >
@@ -673,7 +668,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
         ltvRatio: 50,
         originalCreditLimit: 5000,
         preAuthAmount: preAuthAmountUSD,
-        status: !details.isActive ? "released" : (details.isExpired ? "defaulted" : "active"),
+        status: !details.isActive ? "repaid" : (details.isExpired ? "defaulted" : "active"),
         createdAt: new Date(details.createdAt.toNumber() * 1000).toISOString(),
         preAuthCreatedAt: new Date(details.createdAt.toNumber() * 1000).toISOString(),
         preAuthExpiresAt: new Date(details.preAuthExpiry.toNumber() * 1000).toISOString(),
@@ -729,20 +724,19 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
     };
   }, []);
 
-  const handleCharge = useCallback(
+  const handleRepay = useCallback(
     async (loanId: string) => {
       addToast(
         "info",
         "Processing...",
-        "Repaying loan and releasing pre-authorization."
+        "Repaying loan on blockchain."
       );
 
       setProcessingLoanId(loanId);
       try {
-        // Step 1: Repay the specific loan on blockchain (now requires loan ID)
+        // Repay the specific loan on blockchain
         const receipt = await repayLoan(loanId);
 
-        // Step 2: Release the Stripe pre-authorization (already handled in repayLoan function)
         addToast(
           "success",
           "Loan Repaid Successfully!",
@@ -752,7 +746,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
           )}... Transaction: ${receipt.transactionHash.substring(
             0,
             10
-          )}... Pre-authorization has been released.`
+          )}...`
         );
 
         await refetch(); // Refresh blockchain data
@@ -817,21 +811,6 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            {loanInfo?.lastUpdated && (
-              <div className="text-xs text-gray-400 font-mono">
-                Last updated: {new Date(loanInfo.lastUpdated).toLocaleTimeString()}
-              </div>
-            )}
-            <button
-              onClick={debouncedRefetch}
-              disabled={isLoading || isRefreshing}
-              className="glassmorphism hover:bg-white/10 text-white px-4 py-2 rounded-lg transition-all flex items-center gap-2 border border-white/10 disabled:opacity-50"
-            >
-              <RefreshCw className={isLoading || isRefreshing ? "animate-spin" : ""} size={16} />
-              Refresh
-            </button>
-          </div>
         </div>
 
         {loans.length === 0 ? (
@@ -843,7 +822,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
               No Active Loans
             </h3>
             <p className="text-gray-400 text-lg max-w-md mx-auto leading-relaxed">
-              You haven't created any loans yet. Start borrowing against your
+              You haven&apos;t created any loans yet. Start borrowing against your
               credit card to see them here.
             </p>
           </div>
@@ -865,7 +844,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                       <LoanCard
                         key={loan.id}
                         loan={loan}
-                        onCharge={handleCharge}
+                        onRepay={handleRepay}
                         isProcessing={processingLoanId === loan.id}
                         loanInfo={loanInfo ? {
                           lastUpdated: loanInfo.lastUpdated,
@@ -895,7 +874,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                       <LoanCard
                         key={loan.id}
                         loan={loan}
-                        onCharge={handleCharge}
+                        onRepay={handleRepay}
                         isProcessing={processingLoanId === loan.id}
                         loanInfo={loanInfo ? {
                           lastUpdated: loanInfo.lastUpdated,

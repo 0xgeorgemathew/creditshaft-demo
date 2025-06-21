@@ -41,20 +41,14 @@ export interface Loan {
   preAuthAmount: number;
 
   // Status tracking
-  status: "active" | "charged" | "released" | "defaulted";
+  status: "active" | "repaid" | "defaulted";
 
   // Timestamps
   createdAt: string;
   preAuthCreatedAt?: string;
   preAuthExpiresAt?: string;
-  chargedAt?: string;
-  releasedAt?: string;
+  repaidAt?: string;
 
-  // Stripe data
-  stripeChargeId?: string;
-  actualChargedAmount?: number;
-  stripePreAuthStatus?: string;
-  stripePreAuthAmount?: number;
 
   // Transaction data
   txHash?: string;
@@ -67,34 +61,13 @@ export interface Loan {
 export interface CreditSummary {
   totalCreditLimit: number;
   totalBorrowed: number;
-  totalCharged: number;
-  totalReleased: number;
   availableCredit: number;
   utilizationPercentage: number;
   activeLoans: number;
 }
 
-export interface LoanAction {
-  type: "charge" | "release";
-  loanId: string;
-  amount?: number;
-  reason?: string;
-}
 
-export interface StripeChargeResponse {
-  success: boolean;
-  chargeId?: string;
-  amount?: number;
-  error?: string;
-  stripeResponse?: any;
-}
 
-export interface StripeReleaseResponse {
-  success: boolean;
-  setupIntentId?: string;
-  error?: string;
-  stripeResponse?: any;
-}
 
 // Chainlink Integration Types
 export interface ChainlinkLoanData {

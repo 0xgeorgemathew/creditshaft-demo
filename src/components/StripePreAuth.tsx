@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState, useEffect } from "react";
@@ -126,34 +124,14 @@ function StripeForm({ walletAddress, onPreAuthSuccess }: StripePreAuthProps) {
       } else {
         setError(data.error || "Pre-authorization failed. Please try again.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      console.error("Pre-auth error:", err);
       setError("Network error. Please check your connection and try again.");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Test card button functionality
-  const fillTestCard = async (cardType: "success" | "declined") => {
-    if (!elements) return;
-
-    const cardElement = elements.getElement(CardElement);
-    if (!cardElement) return;
-
-    // Clear the card element first
-    cardElement.clear();
-
-    // For Stripe Elements, we can't programmatically fill test cards
-    // Users need to manually enter them
-    const testCards = {
-      success: "4242 4242 4242 4242",
-      declined: "4000 0000 0000 0002",
-    };
-
-
-    // Focus the card element for user convenience
-    cardElement.focus();
-  };
 
   return (
     <div className="glassmorphism rounded-2xl shadow-2xl p-8 border border-white/20">

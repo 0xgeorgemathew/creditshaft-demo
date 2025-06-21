@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -18,54 +16,49 @@ import { Zap, Shield, TrendingUp, Sparkles, CreditCard, Droplets } from "lucide-
 // Key for session storage (in-memory)
 const PREAUTH_STORAGE_KEY = "creditshaft_preauth_data";
 
+// Valid tab types
+type TabType = "overview" | "borrow" | "manage" | "setup" | "liquidity";
+
+// Helper function to validate tab type
+const isValidTab = (tab: string): tab is TabType => {
+  return ["overview", "borrow", "manage", "setup", "liquidity"].includes(tab as TabType);
+};
+
 export default function Home() {
   const { address, isConnected } = useAccount();
   const [preAuthData, setPreAuthData] = useState<PreAuthData | null>(null);
-  const [showBorrowing, setShowBorrowing] = useState(false);
-  const [showDashboard, setShowDashboard] = useState(false);
-  const [activeTab, setActiveTab] = useState<
-    "overview" | "borrow" | "manage" | "setup" | "liquidity"
-  >("overview");
+  const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [hasActiveLoans, setHasActiveLoans] = useState(false);
   const [sessionStorageCount, setSessionStorageCount] = useState(0);
   const [isSessionRestored, setIsSessionRestored] = useState(false);
 
   // Enhanced session storage helper (browser persistent)
-  const saveToSession = (key: string, data: any) => {
+  const saveToSession = <T,>(key: string, data: T) => {
     try {
       if (typeof window !== 'undefined') {
         const dataString = JSON.stringify(data);
         window.sessionStorage.setItem(key, dataString);
       }
-    } catch (error) {
+    } catch {
       // Silent error handling
     }
   };
 
-  const loadFromSession = (key: string): any | null => {
+  const loadFromSession = <T,>(key: string): T | null => {
     try {
       if (typeof window !== 'undefined') {
         const dataString = window.sessionStorage.getItem(key);
         if (dataString) {
-          const data = JSON.parse(dataString);
+          const data = JSON.parse(dataString) as T;
           return data;
         }
       }
-    } catch (error) {
+    } catch {
       // Silent error handling
     }
     return null;
   };
 
-  const removeFromSession = (key: string) => {
-    try {
-      if (typeof window !== 'undefined') {
-        window.sessionStorage.removeItem(key);
-      }
-    } catch (error) {
-      // Silent error handling
-    }
-  };
 
   // Check for active loans
   const checkActiveLoans = useCallback(async () => {
@@ -107,14 +100,18 @@ export default function Home() {
   useEffect(() => {
     if (isConnected && address) {
       const sessionKey = `${PREAUTH_STORAGE_KEY}_${address}`;
-      const savedPreAuth = loadFromSession(sessionKey);
+      const savedPreAuth = loadFromSession<PreAuthData>(sessionKey);
 
       if (savedPreAuth) {
         setPreAuthData(savedPreAuth);
 
         // Check if user was in the middle of borrowing or managing loans
-        const lastActiveTab = loadFromSession(`tab_${address}`) || "overview";
-        setActiveTab(lastActiveTab);
+        const lastActiveTab = loadFromSession<string>(`tab_${address}`) || "overview";
+        if (isValidTab(lastActiveTab)) {
+          setActiveTab(lastActiveTab);
+        } else {
+          setActiveTab("overview");
+        }
       } else {
       }
 
@@ -134,15 +131,13 @@ export default function Home() {
   useEffect(() => {
     if (!isConnected) {
       setPreAuthData(null);
-      setShowBorrowing(false);
-      setShowDashboard(false);
       setActiveTab("overview");
 
       // Session data persists across wallet disconnections for better UX
     }
   }, [isConnected]);
 
-  const handleWalletConnected = (walletAddress: string) => {
+  const handleWalletConnected = () => {
     // Always redirect to overview after wallet connection
     setActiveTab("overview");
   };
@@ -169,7 +164,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount: 0, // No borrowing, just storing pre-auth
-          asset: "USDC",
+          asset: "ETH",
           walletAddress: address,
           originalCreditLimit: enhancedData.available_credit,
           customerId: enhancedData.customerId,
@@ -180,9 +175,11 @@ export default function Home() {
         }),
       })
         .then((response) => response.json())
-        .then((result) => {
+        .then(() => {
+          // Pre-auth data stored successfully
         })
-        .catch((error) => {
+        .catch(() => {
+          // Silent error handling for pre-auth storage
         });
     }
 
@@ -193,7 +190,6 @@ export default function Home() {
   const handleBorrow = () => {
     // Only proceed to borrow tab if pre-auth data exists
     if (preAuthData) {
-      setShowBorrowing(true);
       setActiveTab("borrow");
     } else {
       // If no pre-auth data, user needs to set up card first
@@ -204,7 +200,6 @@ export default function Home() {
   };
 
   const handleBorrowSuccess = () => {
-    setShowBorrowing(false);
     setActiveTab("manage");
 
     // Check for active loans after successful borrow

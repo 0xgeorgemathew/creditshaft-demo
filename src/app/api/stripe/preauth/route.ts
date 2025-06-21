@@ -2,14 +2,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
-// Enhanced logging utility
+// Simplified logging utility - only log errors and critical events
 const logStripe = (event: string, data: any, isError: boolean = false) => {
-  const timestamp = new Date().toISOString();
-  const logLevel = isError ? "ERROR" : "INFO";
-  console.log(
-    `[${timestamp}] [STRIPE-${logLevel}] ${event}:`,
-    JSON.stringify(data, null, 2)
-  );
+  // Only log errors and critical success events
+  if (isError || event === "ERROR_CAUGHT" || event === "SUCCESS_RESPONSE") {
+    const timestamp = new Date().toISOString();
+    const logLevel = isError ? "ERROR" : "INFO";
+    console.log(
+      `[${timestamp}] [STRIPE-${logLevel}] ${event}:`,
+      JSON.stringify(data, null, 2)
+    );
+  }
 };
 
 // Initialize Stripe with correct API version

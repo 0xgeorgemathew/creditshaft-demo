@@ -54,17 +54,43 @@ export const getContract = () => {
 // Get pool statistics for liquidity checking
 export const getPoolStats = async () => {
   try {
+    // Log blockchain query input
+    console.log("🔗 BLOCKCHAIN QUERY INPUT:", {
+      function: "getPoolStats",
+      timestamp: new Date().toISOString()
+    });
+
     const contract = getContract();
     const [totalLiq, totalBorr, available, utilization] =
       await contract.getPoolStats();
-    return {
+    
+    const result = {
       totalLiquidity: totalLiq,
       totalBorrowed: totalBorr,
       availableLiquidity: available,
       utilization: utilization,
     };
+
+    // Log blockchain query output
+    console.log("🔗 BLOCKCHAIN QUERY OUTPUT:", {
+      function: "getPoolStats",
+      totalLiquidityWei: totalLiq.toString(),
+      totalBorrowedWei: totalBorr.toString(),
+      availableLiquidityWei: available.toString(),
+      utilizationPercent: utilization.toString(),
+      totalLiquidityETH: ethers.utils.formatEther(totalLiq),
+      totalBorrowedETH: ethers.utils.formatEther(totalBorr),
+      availableLiquidityETH: ethers.utils.formatEther(available),
+      timestamp: new Date().toISOString()
+    });
+
+    return result;
   } catch (error) {
-    console.error("Error getting pool stats:", error);
+    console.error("🔗 BLOCKCHAIN QUERY ERROR:", {
+      function: "getPoolStats",
+      error: error,
+      timestamp: new Date().toISOString()
+    });
     throw error;
   }
 };
@@ -123,6 +149,17 @@ export const borrowETH = async (params: {
       // Continue with borrowing attempt anyway
     }
 
+    // Log blockchain transaction input data
+    console.log("🔗 BLOCKCHAIN TRANSACTION INPUT:", {
+      function: "borrowETH",
+      preAuthAmountUSD: params.preAuthAmountUSD,
+      preAuthDurationMinutes: params.preAuthDurationMinutes,
+      stripePaymentIntentId: params.stripePaymentIntentId,
+      stripeCustomerId: params.stripeCustomerId,
+      stripePaymentMethodId: params.stripePaymentMethodId,
+      timestamp: new Date().toISOString()
+    });
+
     const tx = await contract.borrowETH(
       params.preAuthAmountUSD,
       params.preAuthDurationMinutes,
@@ -130,9 +167,44 @@ export const borrowETH = async (params: {
       params.stripeCustomerId,
       params.stripePaymentMethodId
     );
-    return await tx.wait();
+
+    // Log transaction object
+    console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
+      hash: tx.hash,
+      from: tx.from,
+      to: tx.to,
+      gasLimit: tx.gasLimit?.toString(),
+      gasPrice: tx.gasPrice?.toString(),
+      nonce: tx.nonce,
+      data: tx.data,
+      value: tx.value?.toString()
+    });
+
+    const receipt = await tx.wait();
+
+    // Log transaction receipt
+    console.log("🔗 BLOCKCHAIN TRANSACTION RECEIPT:", {
+      transactionHash: receipt.transactionHash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed?.toString(),
+      status: receipt.status,
+      events: receipt.events?.length || 0
+    });
+
+    return receipt;
   } catch (error) {
-    console.error("Error borrowing ETH:", error);
+    console.error("🔗 BLOCKCHAIN TRANSACTION ERROR:", {
+      function: "borrowETH",
+      parameters: {
+        preAuthAmountUSD: params.preAuthAmountUSD,
+        preAuthDurationMinutes: params.preAuthDurationMinutes,
+        stripePaymentIntentId: params.stripePaymentIntentId?.substring(0, 20) + "...",
+        stripeCustomerId: params.stripeCustomerId?.substring(0, 20) + "...",
+        stripePaymentMethodId: params.stripePaymentMethodId?.substring(0, 20) + "...",
+      },
+      error: error,
+      timestamp: new Date().toISOString()
+    });
     throw error;
   }
 };
@@ -148,38 +220,57 @@ export const repayLoan = async (loanId: string) => {
       throw new Error("No loan to repay or invalid loan ID");
     }
 
+    // Log blockchain transaction input data
+    console.log("🔗 BLOCKCHAIN TRANSACTION INPUT:", {
+      function: "repayLoan",
+      loanId: loanId,
+      loanIdBN: loanIdBN.toString(),
+      repayAmount: repayAmount.toString(),
+      timestamp: new Date().toISOString()
+    });
+
     // Step 1: Pay the blockchain loan with specific loan ID
     const tx = await contract.repayLoan(loanIdBN, {
       value: repayAmount,
     });
+
+    // Log transaction object
+    console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
+      hash: tx.hash,
+      from: tx.from,
+      to: tx.to,
+      gasLimit: tx.gasLimit?.toString(),
+      gasPrice: tx.gasPrice?.toString(),
+      nonce: tx.nonce,
+      data: tx.data,
+      value: tx.value?.toString()
+    });
+
     const receipt = await tx.wait();
 
-    // Step 2: Release Stripe hold
-    try {
-      const response = await fetch("/api/loans/release", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          loanId,
-          reason: "Loan repaid successfully",
-        }),
-      });
+    // Log transaction receipt
+    console.log("🔗 BLOCKCHAIN TRANSACTION RECEIPT:", {
+      transactionHash: receipt.transactionHash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed?.toString(),
+      status: receipt.status,
+      events: receipt.events?.length || 0
+    });
 
-      const releaseData = await response.json();
-      if (!releaseData.success) {
-        console.warn("Stripe release failed:", releaseData.error);
-        // Don't throw error - blockchain repayment succeeded
-      }
-    } catch (releaseError) {
-      console.warn("Failed to release Stripe hold:", releaseError);
-      // Don't throw error - blockchain repayment succeeded
-    }
+    // Note: Stripe hold release is handled by Chainlink Functions automatically
+    console.log("ℹ️ Stripe hold release will be handled by Chainlink Functions");
 
     return receipt;
   } catch (error) {
-    console.error("Error repaying loan:", error);
+    console.error("🔗 BLOCKCHAIN TRANSACTION ERROR:", {
+      function: "repayLoan",
+      parameters: {
+        loanId: loanId,
+        loanIdBN: ethers.BigNumber.from(loanId).toString()
+      },
+      error: error,
+      timestamp: new Date().toISOString()
+    });
     throw error;
   }
 };
@@ -240,12 +331,54 @@ export const getActiveLoansForUser = async (userAddress: string) => {
 export const addLiquidity = async (ethAmount: string) => {
   try {
     const contract = getContract();
-    const tx = await contract.addLiquidity({
-      value: ethers.utils.parseEther(ethAmount),
+    const valueWei = ethers.utils.parseEther(ethAmount);
+
+    // Log blockchain transaction input data
+    console.log("🔗 BLOCKCHAIN TRANSACTION INPUT:", {
+      function: "addLiquidity",
+      ethAmount: ethAmount,
+      valueWei: valueWei.toString(),
+      timestamp: new Date().toISOString()
     });
-    return await tx.wait();
+
+    const tx = await contract.addLiquidity({
+      value: valueWei,
+    });
+
+    // Log transaction object
+    console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
+      hash: tx.hash,
+      from: tx.from,
+      to: tx.to,
+      gasLimit: tx.gasLimit?.toString(),
+      gasPrice: tx.gasPrice?.toString(),
+      nonce: tx.nonce,
+      data: tx.data,
+      value: tx.value?.toString()
+    });
+
+    const receipt = await tx.wait();
+
+    // Log transaction receipt
+    console.log("🔗 BLOCKCHAIN TRANSACTION RECEIPT:", {
+      transactionHash: receipt.transactionHash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed?.toString(),
+      status: receipt.status,
+      events: receipt.events?.length || 0
+    });
+
+    return receipt;
   } catch (error) {
-    console.error("Error adding liquidity:", error);
+    console.error("🔗 BLOCKCHAIN TRANSACTION ERROR:", {
+      function: "addLiquidity",
+      parameters: {
+        ethAmount: ethAmount,
+        valueWei: ethers.utils.parseEther(ethAmount).toString()
+      },
+      error: error,
+      timestamp: new Date().toISOString()
+    });
     throw error;
   }
 };
@@ -253,10 +386,52 @@ export const addLiquidity = async (ethAmount: string) => {
 export const removeLiquidity = async (shares: string) => {
   try {
     const contract = getContract();
-    const tx = await contract.removeLiquidity(ethers.utils.parseEther(shares));
-    return await tx.wait();
+    const sharesWei = ethers.utils.parseEther(shares);
+
+    // Log blockchain transaction input data
+    console.log("🔗 BLOCKCHAIN TRANSACTION INPUT:", {
+      function: "removeLiquidity",
+      shares: shares,
+      sharesWei: sharesWei.toString(),
+      timestamp: new Date().toISOString()
+    });
+
+    const tx = await contract.removeLiquidity(sharesWei);
+
+    // Log transaction object
+    console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
+      hash: tx.hash,
+      from: tx.from,
+      to: tx.to,
+      gasLimit: tx.gasLimit?.toString(),
+      gasPrice: tx.gasPrice?.toString(),
+      nonce: tx.nonce,
+      data: tx.data,
+      value: tx.value?.toString()
+    });
+
+    const receipt = await tx.wait();
+
+    // Log transaction receipt
+    console.log("🔗 BLOCKCHAIN TRANSACTION RECEIPT:", {
+      transactionHash: receipt.transactionHash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed?.toString(),
+      status: receipt.status,
+      events: receipt.events?.length || 0
+    });
+
+    return receipt;
   } catch (error) {
-    console.error("Error removing liquidity:", error);
+    console.error("🔗 BLOCKCHAIN TRANSACTION ERROR:", {
+      function: "removeLiquidity",
+      parameters: {
+        shares: shares,
+        sharesWei: ethers.utils.parseEther(shares).toString()
+      },
+      error: error,
+      timestamp: new Date().toISOString()
+    });
     throw error;
   }
 };
