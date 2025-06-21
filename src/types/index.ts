@@ -58,6 +58,10 @@ export interface Loan {
 
   // Transaction data
   txHash?: string;
+
+  // Blockchain data
+  blockchainInterest?: number;
+  blockchainRepayAmount?: number;
 }
 
 export interface CreditSummary {

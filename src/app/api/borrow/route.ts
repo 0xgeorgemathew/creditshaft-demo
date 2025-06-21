@@ -17,7 +17,9 @@ export async function POST(request: NextRequest) {
       customerId,
       paymentMethodId,
       setupIntentId,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       cardLastFour,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       cardBrand,
     } = await request.json();
 
@@ -64,7 +66,7 @@ export async function POST(request: NextRequest) {
         amount: borrowAmountUSD,
         amountETH: borrowAmountETHNum,
         contractParams: {
-          preAuthAmountUSD: Math.round(preAuthAmount * 100),
+          preAuthAmountUSD: Math.round(preAuthAmount), // Contract expects USD amount in dollars, not cents
           preAuthDurationMinutes: preAuthDurationMinutes || 7 * 24 * 60,
           stripePaymentIntentId: preAuthId || setupIntentId || `demo_${Date.now()}`,
           stripeCustomerId: customerId || "demo_customer",
@@ -104,7 +106,7 @@ export async function POST(request: NextRequest) {
         requiresContractCall: true,
         loanId,
         contractParams: {
-          preAuthAmountUSD: Math.round(preAuthAmount * 100),
+          preAuthAmountUSD: Math.round(preAuthAmount), // Contract expects USD amount in dollars, not cents
           preAuthDurationMinutes: preAuthDurationMinutes || 7 * 24 * 60,
           stripePaymentIntentId: paymentIntent.id,
           stripeCustomerId: customerId,
@@ -112,28 +114,20 @@ export async function POST(request: NextRequest) {
         }
       });
 
-    } catch (stripeError: any) {
+    } catch (stripeError: unknown) {
+      const errorMessage = stripeError instanceof Error ? stripeError.message : 'Unknown Stripe error';
       return NextResponse.json({
         success: false,
-        error: `Stripe error: ${stripeError.message}`,
+        error: `Stripe error: ${errorMessage}`,
       }, { status: 400 });
     }
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Borrowing failed';
     return NextResponse.json({
       success: false,
-      error: error.message || "Borrowing failed",
+      error: errorMessage,
     }, { status: 500 });
   }
 }
 
-// Helper function to get interest rate by asset
-function getInterestRate(asset: string): number {
-  const rates: Record<string, number> = {
-    ETH: 4.5,
-    USDC: 5.2,
-    USDT: 4.8,
-    DAI: 5.5,
-  };
-  return rates[asset] || 4.5;
-}

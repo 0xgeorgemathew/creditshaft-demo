@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { PreAuthData } from "@/types";
 import {
   DollarSign,
@@ -33,15 +33,15 @@ export default function BorrowingInterface({
   walletAddress,
   onBorrowSuccess,
 }: BorrowingInterfaceProps) {
-  const { borrowETH, loading: contractLoading, error: contractError } = useContractOperations();
-  const [preAuthAmount, setPreAuthAmount] = useState("");
-  const [selectedAsset] = useState("ETH");
-  const [selectedLTV, setSelectedLTV] = useState(50); // Default 50% LTV (200% collateralization)
-  const [selectedDuration, setSelectedDuration] = useState(168); // Default 7 days (168 hours)
+  const { borrowETH, loading: contractLoading } = useContractOperations();
   const [ethPrice, setEthPrice] = useState(3500); // Default fallback price
   const [ethPriceLoading, setEthPriceLoading] = useState(true);
   const [ethPriceSource, setEthPriceSource] = useState("loading");
   const [lastPriceUpdate, setLastPriceUpdate] = useState<Date | null>(null);
+  const [preAuthAmount, setPreAuthAmount] = useState("");
+  const [selectedAsset] = useState("ETH");
+  const [selectedLTV, setSelectedLTV] = useState(50); // Default 50% LTV (200% collateralization)
+  const [selectedDuration, setSelectedDuration] = useState(1); // Default 1 minute
   const [isProcessing, setIsProcessing] = useState(false);
   const isLoading = isProcessing || contractLoading;
   const [borrowSuccess, setBorrowSuccess] = useState(false);
@@ -60,7 +60,6 @@ export default function BorrowingInterface({
         setEthPrice(data.price);
         setEthPriceSource(data.source || "api");
         setLastPriceUpdate(new Date());
-      } else {
       }
     } catch {
       setEthPriceSource("fallback");
@@ -105,21 +104,36 @@ export default function BorrowingInterface({
 
   const assets = [{ symbol: "ETH", name: "Ethereum", rate: "4.5%" }];
 
-  // Calculate loan metrics
-  const preAuthAmountValue = parseFloat(preAuthAmount) || 0;
-  const borrowAmountUSD = preAuthAmountValue * (selectedLTV / 100);
-  const borrowAmountETH = borrowAmountUSD / ethPrice;
+  // Calculate loan metrics with proper validation
+  const preAuthAmountValue = useMemo(() => {
+    const parsed = parseFloat(preAuthAmount);
+    return isNaN(parsed) || parsed < 0 ? 0 : parsed;
+  }, [preAuthAmount]);
+
+  const borrowAmountUSD = useMemo(() => {
+    if (preAuthAmountValue <= 0 || selectedLTV <= 0) return 0;
+    return preAuthAmountValue * (selectedLTV / 100);
+  }, [preAuthAmountValue, selectedLTV]);
+
+  const borrowAmountETH = useMemo(() => {
+    if (borrowAmountUSD <= 0 || ethPrice <= 0 || isNaN(ethPrice)) return 0;
+    return borrowAmountUSD / ethPrice;
+  }, [borrowAmountUSD, ethPrice]);
+
   const requiredPreAuth = preAuthAmountValue;
   const actualLTV = selectedLTV;
-  // Calculate liquidation price and risk
-  const liquidationPrice = calculateLiquidationPrice(
-    borrowAmountUSD,
-    preAuthAmountValue,
-    ethPrice,
-    85
-  );
-  const riskLevel = getRiskLevel(actualLTV);
-  const collateralizationRatio = getCollateralizationRatio(preAuthAmountValue, borrowAmountUSD);
+
+  // Calculate liquidation price and risk with validation
+  const liquidationPrice = useMemo(() => {
+    if (borrowAmountUSD <= 0 || preAuthAmountValue <= 0 || ethPrice <= 0) return 0;
+    return calculateLiquidationPrice(borrowAmountUSD, preAuthAmountValue, ethPrice, 85);
+  }, [borrowAmountUSD, preAuthAmountValue, ethPrice]);
+
+  const riskLevel = useMemo(() => getRiskLevel(actualLTV), [actualLTV]);
+  const collateralizationRatio = useMemo(() => {
+    if (preAuthAmountValue <= 0 || borrowAmountUSD <= 0) return 0;
+    return getCollateralizationRatio(preAuthAmountValue, borrowAmountUSD);
+  }, [preAuthAmountValue, borrowAmountUSD]);
 
   const handleBorrow = async () => {
     setIsProcessing(true);
@@ -135,7 +149,7 @@ export default function BorrowingInterface({
         preAuthId: preAuthData.preAuthId || "demo_preauth_id",
         requiredPreAuth: preAuthAmountValue,
         selectedLTV: actualLTV,
-        preAuthDurationMinutes: selectedDuration * 60,
+        preAuthDurationMinutes: selectedDuration, // selectedDuration is in minutes
         customerId: preAuthData.customerId,
         paymentMethodId: preAuthData.paymentMethodId,
         setupIntentId: preAuthData.setupIntentId,
@@ -548,47 +562,49 @@ export default function BorrowingInterface({
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-gray-300">Duration:</span>
                 <span className="text-lg font-semibold text-white">
-                  {Math.round(selectedDuration / 24)} Day{Math.round(selectedDuration / 24) !== 1 ? 's' : ''}
-                </span>
-              </div>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-xs text-gray-400">Hours:</span>
-                <span className="text-xs text-white font-medium">
-                  {selectedDuration}h
+                  {selectedDuration === 10080 
+                    ? '7 Days' 
+                    : selectedDuration === 60 
+                      ? '1 Hour' 
+                      : `${selectedDuration} Minute${selectedDuration !== 1 ? 's' : ''}`}
                 </span>
               </div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-gray-400">Quick</span>
+                <span className="text-xs text-gray-400">1 Min</span>
                 <span className="text-xs text-gray-400">
-                  Maximum
+                  7 Days
                 </span>
               </div>
 
               <div className="relative">
                 <input
                   type="range"
-                  min="24"
-                  max="168"
-                  step="12"
-                  value={selectedDuration}
+                  min="0"      // 0 to 61 positions
+                  max="61"     // 61 positions total
+                  step="1"     // 1 step increments
+                  value={selectedDuration === 10080 ? 61 : selectedDuration}
                   onChange={(e) => {
-                    const value = parseInt(e.target.value);
-                    setSelectedDuration(value);
+                    const sliderValue = parseInt(e.target.value);
+                    if (sliderValue === 61) {
+                      setSelectedDuration(10080); // 7 days
+                    } else {
+                      setSelectedDuration(sliderValue === 0 ? 1 : sliderValue);
+                    }
                   }}
                   className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider-thumb"
                   style={{
                     background: `linear-gradient(to right, 
-                      ${selectedDuration <= 48 
+                      ${selectedDuration <= 10  // 10 minutes
                         ? '#10b981' 
-                        : selectedDuration <= 120 
+                        : selectedDuration <= 60 && selectedDuration !== 10080  // 1 hour
                         ? '#3b82f6' 
                         : '#f59e0b'} 0%, 
-                      ${selectedDuration <= 48 
+                      ${selectedDuration <= 10 
                         ? '#10b981' 
-                        : selectedDuration <= 120 
+                        : selectedDuration <= 60 && selectedDuration !== 10080
                         ? '#3b82f6' 
-                        : '#f59e0b'} ${((selectedDuration - 24) / (168 - 24)) * 100}%, 
-                      rgba(255,255,255,0.2) ${((selectedDuration - 24) / (168 - 24)) * 100}%, 
+                        : '#f59e0b'} ${selectedDuration === 10080 ? 100 : ((selectedDuration - 1) / 60) * 100}%, 
+                      rgba(255,255,255,0.2) ${selectedDuration === 10080 ? 100 : ((selectedDuration - 1) / 60) * 100}%, 
                       rgba(255,255,255,0.2) 100%)`
                   }}
                 />
@@ -596,29 +612,39 @@ export default function BorrowingInterface({
 
               <div className="flex justify-between mt-2 text-xs text-gray-400">
                 <button
-                  onClick={() => setSelectedDuration(24)}
+                  onClick={() => setSelectedDuration(1)} // 1 minute
                   className={`px-2 py-1 rounded transition-colors ${
-                    selectedDuration === 24
+                    selectedDuration === 1
                       ? "text-emerald-300 bg-emerald-500/20"
                       : "hover:text-white"
                   }`}
                 >
-                  1 Day
+                  1 Min
                 </button>
                 <button
-                  onClick={() => setSelectedDuration(72)}
+                  onClick={() => setSelectedDuration(10)} // 10 minutes
                   className={`px-2 py-1 rounded transition-colors ${
-                    selectedDuration === 72
+                    selectedDuration === 10
+                      ? "text-emerald-300 bg-emerald-500/20"
+                      : "hover:text-white"
+                  }`}
+                >
+                  10 Min
+                </button>
+                <button
+                  onClick={() => setSelectedDuration(60)} // 1 hour
+                  className={`px-2 py-1 rounded transition-colors ${
+                    selectedDuration === 60
                       ? "text-blue-300 bg-blue-500/20"
                       : "hover:text-white"
                   }`}
                 >
-                  3 Days
+                  1 Hour
                 </button>
                 <button
-                  onClick={() => setSelectedDuration(168)}
+                  onClick={() => setSelectedDuration(10080)} // 7 days in minutes
                   className={`px-2 py-1 rounded transition-colors ${
-                    selectedDuration === 168
+                    selectedDuration === 10080
                       ? "text-amber-300 bg-amber-500/20"
                       : "hover:text-white"
                   }`}
@@ -635,7 +661,11 @@ export default function BorrowingInterface({
                 <div className="flex items-center gap-2">
                   <BarChart3 size={12} className="text-green-400" />
                   <span>
-                    Current selection: {Math.round(selectedDuration / 24)} day{Math.round(selectedDuration / 24) !== 1 ? 's' : ''} ({selectedDuration} hours)
+                    Current selection: {selectedDuration === 10080 
+                      ? '7 days' 
+                      : selectedDuration === 60 
+                        ? '1 hour' 
+                        : `${selectedDuration} minute${selectedDuration !== 1 ? 's' : ''}`}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">

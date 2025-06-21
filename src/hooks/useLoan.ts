@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
-import { getContract, getMyActiveLoans, getLoanDetails, doIHaveActiveLoan } from '@/lib/contract';
+import { getContract, getActiveLoansForUser, getLoanDetails, hasActiveLoan } from '@/lib/contract';
+import { useAccount } from 'wagmi';
 
 interface LoanInfo {
   hasLoan: boolean;
@@ -13,22 +14,67 @@ interface LoanInfo {
   loanId?: string;
   loanIds?: string[];
   activeLoanCount?: number;
+  // Real-time update tracking
+  lastUpdated?: number;
+  isUpdating?: boolean;
 }
 
 export const useLoanStatus = () => {
   const [loanInfo, setLoanInfo] = useState<LoanInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const { address } = useAccount();
+  
+  // Real-time polling refs
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isPollingRef = useRef(false);
+  const lastPollingTimeRef = useRef(0);
 
-  const fetchLoanStatus = async () => {
+  const fetchLoanStatus = useCallback(async (isBackgroundUpdate = false) => {
+    if (!address) {
+      setLoanInfo({
+        hasLoan: false,
+        principal: '0',
+        interest: '0',
+        total: '0',
+        expired: false,
+        repayAmount: '0',
+        loanIds: [],
+        activeLoanCount: 0,
+        lastUpdated: Date.now(),
+        isUpdating: false
+      });
+      setLoading(false);
+      return;
+    }
+
+    // Prevent concurrent polling requests
+    if (isBackgroundUpdate && isPollingRef.current) {
+      return;
+    }
+
+    // Rate limiting: minimum 5 seconds between requests
+    const now = Date.now();
+    if (isBackgroundUpdate && (now - lastPollingTimeRef.current) < 5000) {
+      return;
+    }
+
     try {
-      setLoading(true);
+      if (!isBackgroundUpdate) {
+        setLoading(true);
+      } else {
+        // Set updating flag for background updates
+        setLoanInfo(prev => prev ? { ...prev, isUpdating: true } : null);
+        isPollingRef.current = true;
+      }
       
-      // Use new contract functions
-      const hasLoan = await doIHaveActiveLoan();
+      lastPollingTimeRef.current = now;
+      
+      // Use address-based contract functions (convenience functions removed for size optimization)
+      const hasLoan = await hasActiveLoan(address);
       
       if (hasLoan) {
         // Get active loans for current user
-        const { activeLoans, count } = await getMyActiveLoans();
+        const { activeLoans, count } = await getActiveLoansForUser(address);
         
         if (activeLoans.length > 0) {
           // Get details for the first active loan (for backward compatibility)
@@ -46,7 +92,9 @@ export const useLoanStatus = () => {
             repayAmount: ethers.utils.formatEther(repayAmount),
             loanId: firstLoanId,
             loanIds: activeLoans,
-            activeLoanCount: count
+            activeLoanCount: count,
+            lastUpdated: Date.now(),
+            isUpdating: false
           });
         } else {
           // Edge case: hasLoan true but no active loans found
@@ -58,7 +106,9 @@ export const useLoanStatus = () => {
             expired: false,
             repayAmount: '0',
             loanIds: [],
-            activeLoanCount: 0
+            activeLoanCount: 0,
+            lastUpdated: Date.now(),
+            isUpdating: false
           });
         }
       } else {
@@ -70,7 +120,9 @@ export const useLoanStatus = () => {
           expired: false,
           repayAmount: '0',
           loanIds: [],
-          activeLoanCount: 0
+          activeLoanCount: 0,
+          lastUpdated: Date.now(),
+          isUpdating: false
         });
       }
     } catch (error) {
@@ -84,16 +136,61 @@ export const useLoanStatus = () => {
         expired: false,
         repayAmount: '0',
         loanIds: [],
-        activeLoanCount: 0
+        activeLoanCount: 0,
+        lastUpdated: Date.now(),
+        isUpdating: false
       });
     } finally {
       setLoading(false);
+      isPollingRef.current = false;
     }
-  };
+  }, [address]);
 
-  useEffect(() => {
-    fetchLoanStatus();
+  // Start/stop real-time polling based on active loans
+  const startPolling = useCallback(() => {
+    if (pollingIntervalRef.current) return; // Already polling
+    
+    pollingIntervalRef.current = setInterval(() => {
+      fetchLoanStatus(true); // Background update
+    }, 12000); // Poll every 12 seconds
+    
+    console.log('Started real-time polling for loan updates');
+  }, [fetchLoanStatus]);
+
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+      console.log('Stopped real-time polling');
+    }
   }, []);
 
-  return { loanInfo, loading, refetch: fetchLoanStatus };
+  // Initial fetch and polling setup
+  useEffect(() => {
+    // Add debouncing to prevent rapid refetches
+    const timeoutId = setTimeout(() => {
+      fetchLoanStatus();
+    }, 100);
+
+    return () => clearTimeout(timeoutId);
+  }, [address, fetchLoanStatus]);
+
+  // Start/stop polling based on loan status
+  useEffect(() => {
+    if (loanInfo?.hasLoan && loanInfo.activeLoanCount! > 0) {
+      startPolling();
+    } else {
+      stopPolling();
+    }
+
+    // Cleanup on unmount
+    return stopPolling;
+  }, [loanInfo?.hasLoan, loanInfo?.activeLoanCount, startPolling, stopPolling]);
+
+  return { 
+    loanInfo, 
+    loading, 
+    refetch: () => fetchLoanStatus(false),
+    isRealTimeActive: pollingIntervalRef.current !== null
+  };
 };

@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { borrowETH, repayLoan, addLiquidity, removeLiquidity, getErrorMessage, getMyLPBalance } from '@/lib/contract';
+import { useState, useEffect, useCallback } from 'react';
+import { borrowETH, repayLoan, addLiquidity, removeLiquidity, getErrorMessage, getUserLPBalance } from '@/lib/contract';
+import { useAccount } from 'wagmi';
 
 
 // Simplified contract operations hook
@@ -20,7 +21,7 @@ export const useContractOperations = () => {
     try {
       const receipt = await borrowETH(params);
       return receipt;
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorMessage = getErrorMessage(err);
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -42,7 +43,7 @@ export const useContractOperations = () => {
     try {
       const receipt = await repayLoan(loanId);
       return receipt;
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorMessage = getErrorMessage(err);
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -67,7 +68,7 @@ export const useContractOperations = () => {
       
       const receipt = await addLiquidity(amount);
       return receipt;
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorMessage = getErrorMessage(err);
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -92,7 +93,7 @@ export const useContractOperations = () => {
       
       const receipt = await removeLiquidity(shares);
       return receipt;
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorMessage = getErrorMessage(err);
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -115,8 +116,9 @@ export const useContractOperations = () => {
 export const useLPValue = () => {
   const [lpValue, setLpValue] = useState<string>("0");
   const [loading, setLoading] = useState(true);
+  const { address } = useAccount();
 
-  const fetchLPValue = async () => {
+  const fetchLPValue = useCallback(async () => {
     try {
       setLoading(true);
       // For demo mode, simulate some LP balance
@@ -124,10 +126,12 @@ export const useLPValue = () => {
         // Simulate user having some LP tokens
         const mockLPBalance = localStorage.getItem('demo_lp_balance') || '1.2500';
         setLpValue(mockLPBalance);
-      } else {
-        // Use new contract function
-        const lpBalance = await getMyLPBalance();
+      } else if (address) {
+        // Use address-based contract function (getMyLPBalance removed for size optimization)
+        const lpBalance = await getUserLPBalance(address);
         setLpValue(lpBalance.value);
+      } else {
+        setLpValue("0");
       }
     } catch (error) {
       console.error("Error fetching LP value:", error);
@@ -135,11 +139,11 @@ export const useLPValue = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [address]);
 
   useEffect(() => {
     fetchLPValue();
-  }, []);
+  }, [address, fetchLPValue]);
 
   return { lpValue, loading, refetch: fetchLPValue };
 };

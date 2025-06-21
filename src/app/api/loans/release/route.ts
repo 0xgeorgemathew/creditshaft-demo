@@ -4,7 +4,7 @@ import { getStripeInstance } from "@/lib/stripe-server";
 
 export async function POST(request: NextRequest) {
   try {
-    const { loanId, reason } = await request.json();
+    const { loanId } = await request.json();
 
     if (!loanId) {
       return NextResponse.json({ success: false, error: "Missing loanId" }, { status: 400 });
@@ -46,17 +46,19 @@ export async function POST(request: NextRequest) {
         stripeReleased: true
       });
 
-    } catch (stripeError: any) {
+    } catch (stripeError: unknown) {
+      const errorMessage = stripeError instanceof Error ? stripeError.message : 'Unknown Stripe error';
       return NextResponse.json({
         success: false,
-        error: `Stripe release failed: ${stripeError.message}`,
+        error: `Stripe release failed: ${errorMessage}`,
       }, { status: 400 });
     }
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Release failed';
     return NextResponse.json({
       success: false,
-      error: error.message || "Release failed",
+      error: errorMessage,
     }, { status: 500 });
   }
 }
