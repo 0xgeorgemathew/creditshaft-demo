@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-12-18.acacia",
+  apiVersion: "2025-05-28.basil",
 });
 
 export async function POST(request: NextRequest) {
@@ -37,11 +37,14 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error cancelling Stripe pre-authorization:", error);
-    
+
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : "Failed to cancel pre-authorization" 
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to cancel pre-authorization",
       },
       { status: 500 }
     );
