@@ -3,44 +3,39 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { PreAuthData } from "@/types";
 import {
-  DollarSign,
   ArrowRight,
   CheckCircle,
   Copy,
   AlertCircle,
   CreditCard,
   TrendingUp,
-  RefreshCw,
   Link,
-  Clock,
   Info,
   Lightbulb,
   BarChart3,
   Shield,
   Zap,
+  RefreshCw,
 } from "lucide-react";
-import { calculateLiquidationPrice, getRiskLevel, getCollateralizationRatio } from "@/lib/chainlink-price";
+import { getRiskLevel, getCollateralizationRatio } from "@/lib/chainlink-price";
 import { useContractOperations } from "@/hooks/useContract";
+import { getLINKPrice } from "@/lib/contract"; // Import getLINKPrice
 
 interface BorrowingInterfaceProps {
   preAuthData: PreAuthData;
-  walletAddress: string;
   onBorrowSuccess?: () => void;
 }
 
 export default function BorrowingInterface({
   preAuthData,
-  walletAddress,
   onBorrowSuccess,
 }: BorrowingInterfaceProps) {
-  const { borrowETH, loading: contractLoading } = useContractOperations();
-  const [ethPrice, setEthPrice] = useState(3500); // Default fallback price
-  const [ethPriceLoading, setEthPriceLoading] = useState(true);
-  const [ethPriceSource, setEthPriceSource] = useState("loading");
-  const [lastPriceUpdate, setLastPriceUpdate] = useState<Date | null>(null);
-  const [preAuthAmount, setPreAuthAmount] = useState("");
-  const [selectedAsset] = useState("ETH");
-  const [selectedLTV, setSelectedLTV] = useState(50); // Default 50% LTV (200% collateralization)
+  const { openLeveragePosition, loading: contractLoading } = useContractOperations();
+  const [linkPrice, setLinkPrice] = useState(0); // No fallback price - must fetch from contract
+  const [linkPriceSource, setLinkPriceSource] = useState("loading");
+  const [linkCollateralAmount, setLinkCollateralAmount] = useState("");
+  const [selectedAsset] = useState("USDC"); // Borrowing USDC equivalent of LINK
+  const [selectedLeverageRatio, setSelectedLeverageRatio] = useState(200); // Default 2x leverage (200%)
   const [selectedDuration, setSelectedDuration] = useState(1); // Default 1 minute
   const [isProcessing, setIsProcessing] = useState(false);
   const isLoading = isProcessing || contractLoading;
@@ -49,35 +44,35 @@ export default function BorrowingInterface({
   const [loanId, setLoanId] = useState("");
   const [countdown, setCountdown] = useState(3);
 
-  // Fetch real ETH price on component mount and periodically
-  const fetchEthPrice = useCallback(async () => {
+  // Fetch real LINK price on component mount and periodically - NO FALLBACK
+  const fetchLinkPrice = useCallback(async () => {
     try {
-      setEthPriceLoading(true);
-      const response = await fetch("/api/eth-price");
-      const data = await response.json();
+      const priceString = await getLINKPrice();
+      const price = parseFloat(priceString) / 1e8; // LINK price feed has 8 decimals
 
-      if (data.success && data.price) {
-        setEthPrice(data.price);
-        setEthPriceSource(data.source || "api");
-        setLastPriceUpdate(new Date());
+      if (price && price > 0) {
+        setLinkPrice(price);
+        setLinkPriceSource("chainlink");
+      } else {
+        throw new Error("Invalid price received from contract");
       }
-    } catch {
-      setEthPriceSource("fallback");
-    } finally {
-      setEthPriceLoading(false);
+    } catch (error) {
+      console.error("Error fetching LINK price:", error);
+      setLinkPriceSource("error");
+      setLinkPrice(0); // Ensure price is 0 on error - no fallback
     }
   }, []);
 
   // Fetch price on mount
   useEffect(() => {
-    fetchEthPrice();
-  }, [fetchEthPrice]);
+    fetchLinkPrice();
+  }, [fetchLinkPrice]);
 
   // Auto-refresh price every 60 seconds
   useEffect(() => {
-    const interval = setInterval(fetchEthPrice, 60000); // 1 minute
+    const interval = setInterval(fetchLinkPrice, 60000); // 1 minute
     return () => clearInterval(interval);
-  }, [fetchEthPrice]);
+  }, [fetchLinkPrice]);
 
   const handleRedirect = useCallback(() => {
     if (onBorrowSuccess) {
@@ -100,98 +95,119 @@ export default function BorrowingInterface({
     }
   }, [borrowSuccess, countdown, handleRedirect]);
 
-  const maxBorrow = preAuthData.available_credit; // User can borrow up to their full credit limit
-
-  const assets = [{ symbol: "ETH", name: "Ethereum", rate: "4.5%" }];
+  // Max LINK collateral (no direct credit limit for LINK, but for pre-auth)
+  // For now, we'll use a high arbitrary number or user's LINK balance if available
+  const maxLinkCollateral = 1000; // Arbitrary high limit for demo
 
   // Calculate loan metrics with proper validation
-  const preAuthAmountValue = useMemo(() => {
-    const parsed = parseFloat(preAuthAmount);
+  const linkCollateralAmountValue = useMemo(() => {
+    const parsed = parseFloat(linkCollateralAmount);
     return isNaN(parsed) || parsed < 0 ? 0 : parsed;
-  }, [preAuthAmount]);
+  }, [linkCollateralAmount]);
 
-  const borrowAmountUSD = useMemo(() => {
-    if (preAuthAmountValue <= 0 || selectedLTV <= 0) return 0;
-    return preAuthAmountValue * (selectedLTV / 100);
-  }, [preAuthAmountValue, selectedLTV]);
+  const borrowedUSDC = useMemo(() => {
+    if (linkCollateralAmountValue <= 0 || selectedLeverageRatio < 150 || linkPrice <= 0) return 0;
+    // borrowedUSDC = collateralLINK_USD_Value * (leverageRatio / 100 - 1)
+    return linkCollateralAmountValue * linkPrice * (selectedLeverageRatio / 100 - 1);
+  }, [linkCollateralAmountValue, selectedLeverageRatio, linkPrice]);
 
-  const borrowAmountETH = useMemo(() => {
-    if (borrowAmountUSD <= 0 || ethPrice <= 0 || isNaN(ethPrice)) return 0;
-    return borrowAmountUSD / ethPrice;
-  }, [borrowAmountUSD, ethPrice]);
+  // Calculate total supplied LINK (collateral + leveraged amount)
+  const totalSuppliedLINK = useMemo(() => {
+    if (linkCollateralAmountValue <= 0 || selectedLeverageRatio < 150 || linkPrice <= 0) return 0;
+    return linkCollateralAmountValue * (selectedLeverageRatio / 100);
+  }, [linkCollateralAmountValue, selectedLeverageRatio]);
 
-  const requiredPreAuth = preAuthAmountValue;
-  const actualLTV = selectedLTV;
+  const requiredPreAuth = useMemo(() => {
+    // preAuthAmount = 150% of borrowedUSDC
+    return borrowedUSDC * 1.5;
+  }, [borrowedUSDC]);
 
   // Calculate liquidation price and risk with validation
   const liquidationPrice = useMemo(() => {
-    if (borrowAmountUSD <= 0 || preAuthAmountValue <= 0 || ethPrice <= 0) return 0;
-    return calculateLiquidationPrice(borrowAmountUSD, preAuthAmountValue, ethPrice, 85);
-  }, [borrowAmountUSD, preAuthAmountValue, ethPrice]);
+    if (borrowedUSDC <= 0 || totalSuppliedLINK <= 0 || linkPrice <= 0) return 0;
+    // Liquidation occurs when: totalSuppliedValue * liquidationThreshold < borrowedAmount
+    // So liquidation price is: borrowedUSDC / (totalSuppliedLINK * liquidationThreshold)
+    const LIQUIDATION_THRESHOLD = 0.85; // 85% - matches contract liquidation threshold
+    return borrowedUSDC / (totalSuppliedLINK * LIQUIDATION_THRESHOLD);
+  }, [borrowedUSDC, totalSuppliedLINK, linkPrice]);
+
+  const actualLTV = useMemo(() => {
+    if (totalSuppliedLINK <= 0 || borrowedUSDC <= 0 || linkPrice <= 0) return 0;
+    // LTV = (borrowedUSDC / (totalSuppliedLINK * linkPrice)) * 100
+    return (borrowedUSDC / (totalSuppliedLINK * linkPrice)) * 100;
+  }, [totalSuppliedLINK, borrowedUSDC, linkPrice]);
 
   const riskLevel = useMemo(() => getRiskLevel(actualLTV), [actualLTV]);
   const collateralizationRatio = useMemo(() => {
-    if (preAuthAmountValue <= 0 || borrowAmountUSD <= 0) return 0;
-    return getCollateralizationRatio(preAuthAmountValue, borrowAmountUSD);
-  }, [preAuthAmountValue, borrowAmountUSD]);
+    if (totalSuppliedLINK <= 0 || borrowedUSDC <= 0 || linkPrice <= 0) return 0;
+    return getCollateralizationRatio(totalSuppliedLINK * linkPrice, borrowedUSDC);
+  }, [totalSuppliedLINK, borrowedUSDC, linkPrice]);
 
   const handleBorrow = async () => {
     setIsProcessing(true);
 
     try {
-      // Simplified borrowing flow
-      const requestData = {
-        amount: borrowAmountUSD,
-        amountETH: borrowAmountETH,
-        ethPrice: ethPrice,
-        asset: selectedAsset,
-        walletAddress,
-        preAuthId: preAuthData.preAuthId || "demo_preauth_id",
-        requiredPreAuth: preAuthAmountValue,
-        selectedLTV: actualLTV,
-        preAuthDurationMinutes: selectedDuration, // selectedDuration is in minutes
-        customerId: preAuthData.customerId,
-        paymentMethodId: preAuthData.paymentMethodId,
-        setupIntentId: preAuthData.setupIntentId,
-        cardLastFour: preAuthData.card_last_four,
-        cardBrand: preAuthData.card_brand,
-      };
+      // Ensure Stripe details are available
+      if (!preAuthData.setupIntentId || !preAuthData.customerId || !preAuthData.paymentMethodId) {
+        alert("Stripe payment details are missing. Please ensure you have completed the pre-authorization step.");
+        setIsProcessing(false);
+        return;
+      }
 
-      console.log("Creating loan...", requestData);
-
-      const response = await fetch("/api/borrow", {
+      // Step 1: Call /api/borrow to create payment intent
+      console.log("Creating payment intent via /api/borrow...");
+      
+      const borrowResponse = await fetch("/api/borrow", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(requestData),
+        body: JSON.stringify({
+          amount: borrowedUSDC.toString(),
+          amountETH: "0", // Not used in LINK leverage
+          ethPrice: linkPrice.toString(),
+          asset: "USDC",
+          walletAddress: preAuthData.wallet_address,
+          preAuthId: preAuthData.preAuthId,
+          requiredPreAuth: requiredPreAuth,
+          selectedLTV: actualLTV,
+          preAuthDurationMinutes: selectedDuration,
+          customerId: preAuthData.customerId,
+          paymentMethodId: preAuthData.paymentMethodId,
+          setupIntentId: preAuthData.setupIntentId,
+          cardLastFour: preAuthData.card_last_four,
+          cardBrand: preAuthData.card_brand,
+        }),
       });
 
-      const data = await response.json();
-      console.log("Borrow response:", data);
-
-      if (!data.success) {
-        throw new Error(data.error || "Borrow request failed");
+      const borrowData = await borrowResponse.json();
+      
+      if (!borrowData.success) {
+        throw new Error(borrowData.error || "Failed to create payment intent");
       }
 
-      // Call smart contract if needed
-      if (data.contractParams) {
-        console.log("Calling smart contract...");
-        
-        const receipt = await borrowETH(data.contractParams);
-        console.log("Contract transaction successful:", receipt);
+      console.log("Payment intent created successfully:", borrowData.contractParams?.stripePaymentIntentId);
 
-        setTxHash(receipt.transactionHash);
-        setLoanId(data.loanId);
-        setBorrowSuccess(true);
-        setCountdown(3);
-      } else {
-        // Demo mode response
-        setTxHash(data.txHash || data.loanId);
-        setLoanId(data.loanId || "unknown");
-        setBorrowSuccess(true);
-        setCountdown(3);
-      }
+      // Step 2: Open leverage position with the real payment intent
+      console.log("Opening leverage position with payment intent:", borrowData.contractParams.stripePaymentIntentId);
+      
+      const receipt = await openLeveragePosition({
+        leverageRatio: selectedLeverageRatio,
+        collateralLINK: linkCollateralAmountValue.toString(),
+        expiryDuration: selectedDuration, // Pass minutes directly (contract.ts will convert to seconds)
+        stripePaymentIntentId: borrowData.contractParams.stripePaymentIntentId,
+        stripeCustomerId: borrowData.contractParams.stripeCustomerId,
+        stripePaymentMethodId: borrowData.contractParams.stripePaymentMethodId,
+      });
+
+      console.log("Contract transaction successful:", receipt);
+
+      setTxHash(receipt.transactionHash);
+      // Loan ID might be an event parameter, for now, use tx hash or a placeholder
+      setLoanId(receipt.transactionHash.substring(0, 10) + "..."); 
+      setBorrowSuccess(true);
+      setCountdown(3);
+      
     } catch (error) {
       console.error("Borrowing failed:", error);
       const errorMessage = (error as Error).message;
@@ -218,10 +234,10 @@ export default function BorrowingInterface({
           <div className="glassmorphism rounded-xl p-6 mb-6 max-w-md mx-auto border border-white/20">
             <p className="text-sm text-gray-300 mb-2">You borrowed:</p>
             <p className="text-3xl font-bold text-green-400">
-              {borrowAmountETH.toFixed(4)} {selectedAsset}
+              ${borrowedUSDC.toFixed(2)} {selectedAsset}
             </p>
             <p className="text-sm text-blue-300">
-              ≈ ${borrowAmountUSD.toLocaleString()} USD
+              ≈ {linkCollateralAmountValue.toFixed(4)} LINK collateral
             </p>
             <p className="text-sm text-gray-400 mt-2">
               Pre-authorized: ${requiredPreAuth.toLocaleString()} ({actualLTV}%
@@ -271,8 +287,7 @@ export default function BorrowingInterface({
                     className="text-green-400 mt-0.5 flex-shrink-0"
                   />
                   <span>
-                    Interest accrues at{" "}
-                    {assets.find((a) => a.symbol === selectedAsset)?.rate} APY
+                    Position is active until repayment or liquidation
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
@@ -325,42 +340,43 @@ export default function BorrowingInterface({
   return (
     <div className="glassmorphism rounded-2xl shadow-2xl p-8 border border-white/20">
       <h2 className="text-3xl font-bold text-white mb-8 gradient-text">
-        Borrow Against Your Credit
+        Open Leveraged Position
       </h2>
 
       <div className="grid md:grid-cols-2 gap-8">
         <div className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-200 mb-3">
-              Pre-Authorization Amount (Collateral)
+              LINK Collateral Amount
             </label>
             <div className="relative">
-              <DollarSign
+              <Link
                 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
                 size={20}
               />
               <input
                 type="number"
-                value={preAuthAmount}
-                onChange={(e) => setPreAuthAmount(e.target.value)}
+                value={linkCollateralAmount}
+                onChange={(e) => setLinkCollateralAmount(e.target.value)}
                 placeholder="0.00"
-                max={maxBorrow}
+                max={maxLinkCollateral}
                 className="w-full pl-10 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg text-white placeholder-gray-400 transition-all"
               />
             </div>
             <div className="mt-2 space-y-1">
               <p className="text-sm text-gray-300">
-                Maximum: ${maxBorrow.toLocaleString()} (your credit limit)
+                Maximum: {maxLinkCollateral.toLocaleString()} LINK (arbitrary limit)
               </p>
-              {preAuthAmountValue > 0 && (
+              {linkCollateralAmountValue > 0 && (
                 <div className="space-y-1">
                   <p className="text-sm text-green-300 font-semibold">
-                    You can borrow: {borrowAmountETH.toFixed(4)} ETH ($
-                    {borrowAmountUSD.toLocaleString()} USD)
+                    You will borrow: ${borrowedUSDC.toFixed(2)} USDC
                   </p>
                   <p className="text-sm text-blue-300">
-                    At {actualLTV}% LTV • ETH Price: $
-                    {ethPrice.toLocaleString()}
+                    At {selectedLeverageRatio / 100}x Leverage • LINK Price: ${linkPrice.toLocaleString()}
+                  </p>
+                  <p className="text-sm text-yellow-300">
+                    Required Pre-Auth: ${requiredPreAuth.toLocaleString()} USD
                   </p>
                 </div>
               )}
@@ -369,132 +385,42 @@ export default function BorrowingInterface({
 
           <div>
             <label className="block text-sm font-medium text-gray-200 mb-3">
-              Asset to Borrow
+              Leverage Ratio
             </label>
             <div className="glassmorphism rounded-xl p-4 border border-white/20 hover:border-blue-500/30 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center shadow-lg">
-                  <span className="text-white font-bold text-lg">Ξ</span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-white font-semibold">Ethereum (ETH)</p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm text-gray-400">
-                      4.5% APY •
-                      {ethPriceLoading ? (
-                        <span className="animate-pulse">Loading...</span>
-                      ) : (
-                        <span className="font-mono">
-                          ${ethPrice.toLocaleString()}/ETH
-                        </span>
-                      )}
-                    </p>
-                    <button
-                      onClick={fetchEthPrice}
-                      disabled={ethPriceLoading}
-                      className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50 transition-colors p-1 hover:bg-blue-500/10 rounded"
-                      title="Refresh ETH price"
-                    >
-                      <RefreshCw
-                        size={12}
-                        className={ethPriceLoading ? "animate-spin" : ""}
-                      />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    {ethPriceSource === "chainlink" && (
-                      <div className="flex items-center gap-1 text-emerald-400">
-                        <Link size={10} />
-                        <span>Chainlink Oracle</span>
-                      </div>
-                    )}
-                    {ethPriceSource === "coingecko_fallback" && (
-                      <div className="flex items-center gap-1 text-blue-400">
-                        <TrendingUp size={10} />
-                        <span>CoinGecko API</span>
-                      </div>
-                    )}
-                    {ethPriceSource === "cache" && (
-                      <div className="flex items-center gap-1 text-yellow-400">
-                        <Clock size={10} />
-                        <span>Cached price</span>
-                      </div>
-                    )}
-                    {ethPriceSource === "cache_fallback" && (
-                      <div className="flex items-center gap-1 text-orange-400">
-                        <Clock size={10} />
-                        <span>Cache fallback</span>
-                      </div>
-                    )}
-                    {ethPriceSource === "mock_fallback" && (
-                      <div className="flex items-center gap-1 text-red-400">
-                        <AlertCircle size={10} />
-                        <span>Mock fallback</span>
-                      </div>
-                    )}
-                    {ethPriceSource === "loading" && (
-                      <div className="flex items-center gap-1 text-orange-400">
-                        <RefreshCw size={10} className="animate-spin" />
-                        <span>Loading...</span>
-                      </div>
-                    )}
-                    {lastPriceUpdate && (
-                      <span className="text-gray-400">
-                        • Updated {lastPriceUpdate.toLocaleTimeString()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-200 mb-3">
-              Loan Coverage Ratio
-            </label>
-            <div className="glassmorphism rounded-xl p-4 border border-white/20">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-300">Coverage Ratio:</span>
+                <span className="text-sm text-gray-300">Leverage:</span>
                 <span className="text-lg font-semibold text-white">
-                  {preAuthAmountValue > 0 ? collateralizationRatio.toFixed(0) : "0"}%
+                  {(selectedLeverageRatio / 100).toFixed(1)}x
                 </span>
               </div>
               <div className="flex items-center justify-between mb-4">
-                <span className="text-xs text-gray-400">LTV:</span>
-                <span className="text-xs text-white font-medium">
-                  {selectedLTV}%
-                </span>
-              </div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-gray-400">Safe (High Coverage)</span>
-                <span className="text-xs text-gray-400">
-                  Risky (Low Coverage)
-                </span>
+                <span className="text-xs text-gray-400">1.5x (150%)</span>
+                <span className="text-xs text-gray-400">5x (500%)</span>
               </div>
 
               <div className="relative">
                 <input
                   type="range"
-                  min="30"
-                  max="66.67"
-                  step="0.1"
-                  value={selectedLTV}
-                  onChange={(e) => setSelectedLTV(parseFloat(e.target.value))}
+                  min="150"
+                  max="500"
+                  step="10"
+                  value={selectedLeverageRatio}
+                  onChange={(e) => setSelectedLeverageRatio(parseInt(e.target.value))}
                   className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider-thumb"
                   style={{
                     background: `linear-gradient(to right, 
-                      ${selectedLTV <= 40 
+                      ${selectedLeverageRatio <= 250 
                         ? '#10b981' 
-                        : selectedLTV <= 55 
+                        : selectedLeverageRatio <= 400 
                         ? '#3b82f6' 
                         : '#f59e0b'} 0%, 
-                      ${selectedLTV <= 40 
+                      ${selectedLeverageRatio <= 250 
                         ? '#10b981' 
-                        : selectedLTV <= 55 
+                        : selectedLeverageRatio <= 400 
                         ? '#3b82f6' 
-                        : '#f59e0b'} ${((selectedLTV - 30) / (66.67 - 30)) * 100}%, 
-                      rgba(255,255,255,0.2) ${((selectedLTV - 30) / (66.67 - 30)) * 100}%, 
+                        : '#f59e0b'} ${((selectedLeverageRatio - 150) / (500 - 150)) * 100}%, 
+                      rgba(255,255,255,0.2) ${((selectedLeverageRatio - 150) / (500 - 150)) * 100}%, 
                       rgba(255,255,255,0.2) 100%)`,
                   }}
                 />
@@ -502,52 +428,62 @@ export default function BorrowingInterface({
 
               <div className="flex justify-between mt-2 text-xs text-gray-400">
                 <button
-                  onClick={() => setSelectedLTV(30)}
+                  onClick={() => setSelectedLeverageRatio(150)}
                   className={`px-2 py-1 rounded transition-colors ${
-                    Math.abs(selectedLTV - 30) < 0.1
+                    selectedLeverageRatio === 150
                       ? "text-emerald-300 bg-emerald-500/20"
                       : "hover:text-white"
                   }`}
                 >
-                  30%
+                  1.5x
                 </button>
                 <button
-                  onClick={() => setSelectedLTV(50)}
+                  onClick={() => setSelectedLeverageRatio(200)}
                   className={`px-2 py-1 rounded transition-colors ${
-                    Math.abs(selectedLTV - 50) < 0.1
+                    selectedLeverageRatio === 200
                       ? "text-emerald-300 bg-emerald-500/20"
                       : "hover:text-white"
                   }`}
                 >
-                  50%
+                  2x
                 </button>
                 <button
-                  onClick={() => setSelectedLTV(66.67)}
+                  onClick={() => setSelectedLeverageRatio(300)}
                   className={`px-2 py-1 rounded transition-colors ${
-                    Math.abs(selectedLTV - 66.67) < 0.1
-                      ? "text-emerald-300 bg-emerald-500/20"
+                    selectedLeverageRatio === 300
+                      ? "text-blue-300 bg-blue-500/20"
                       : "hover:text-white"
                   }`}
                 >
-                  66.7%
+                  3x
+                </button>
+                <button
+                  onClick={() => setSelectedLeverageRatio(500)}
+                  className={`px-2 py-1 rounded transition-colors ${
+                    selectedLeverageRatio === 500
+                      ? "text-amber-300 bg-amber-500/20"
+                      : "hover:text-white"
+                  }`}
+                >
+                  5x
                 </button>
               </div>
 
               <div className="mt-3 text-xs text-gray-400 space-y-1">
                 <div className="flex items-center gap-2">
                   <Lightbulb size={12} className="text-blue-400" />
-                  <span>Higher coverage = Safer against ETH price increases</span>
+                  <span>Higher leverage = Higher potential returns, higher risk</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <BarChart3 size={12} className="text-green-400" />
                   <span>
-                    Your ${preAuthAmountValue.toLocaleString()} covers ${borrowAmountUSD.toLocaleString()} of ETH
+                    With {linkCollateralAmountValue.toFixed(2)} LINK collateral → {totalSuppliedLINK.toFixed(2)} LINK exposure, you borrow ${borrowedUSDC.toFixed(2)} USDC
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <AlertCircle size={12} className="text-amber-400" />
                   <span>
-                    Risk: ETH price rising reduces your safety margin
+                    Risk: LINK price falling reduces your safety margin
                   </span>
                 </div>
               </div>
@@ -679,7 +615,7 @@ export default function BorrowingInterface({
           </div>
 
           {/* Risk Assessment */}
-          {preAuthAmountValue > 0 && borrowAmountUSD > 0 && (
+          {linkCollateralAmountValue > 0 && borrowedUSDC > 0 && (
             <div
               className={`flex items-start gap-3 p-4 rounded-xl border ${
                 riskLevel.level === "Critical"
@@ -713,18 +649,19 @@ export default function BorrowingInterface({
                 {liquidationPrice > 0 && (
                   <p className="text-sm mt-2">
                     <strong>
-                      Liquidation if ETH rises above: $
-                      {liquidationPrice.toLocaleString()}
+                      Liquidation if LINK falls below: ${liquidationPrice.toLocaleString()}
                     </strong>
                     <br />
                     <span className="text-xs opacity-80">
-                      Current ETH price: ${ethPrice.toLocaleString()}{" "}
-                      {liquidationPrice > ethPrice
+                      Current LINK price: ${linkPrice.toLocaleString()}{" "}
+                      {liquidationPrice < linkPrice
                         ? `(${(
-                            ((liquidationPrice - ethPrice) / ethPrice) *
+                            ((linkPrice - liquidationPrice) /
+                            linkPrice
+                          ) *
                             100
                           ).toFixed(1)}% buffer)`
-                        : "(CRITICAL - Already above liquidation!)"}
+                        : "(CRITICAL - Already below liquidation!)"}
                     </span>
                   </p>
                 )}
@@ -732,18 +669,36 @@ export default function BorrowingInterface({
             </div>
           )}
 
+          {/* Error if price feed is not available */}
+          {linkPriceSource === "error" && (
+            <div className="flex items-start gap-3 text-red-300 bg-red-500/10 p-4 rounded-xl border border-red-500/30">
+              <AlertCircle size={20} className="mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold">Price Feed Unavailable</p>
+                <p className="text-sm">
+                  Cannot fetch LINK price from the contract&apos;s price feed. Please check your connection and try again.
+                </p>
+                <button
+                  onClick={fetchLinkPrice}
+                  className="mt-2 text-sm text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                >
+                  <RefreshCw size={14} />
+                  Retry Price Fetch
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Warning if pre-auth exceeds credit limit */}
-          {preAuthAmountValue > 0 &&
-            preAuthAmountValue > preAuthData.available_credit && (
+          {requiredPreAuth > 0 &&
+            requiredPreAuth > preAuthData.available_credit && (
               <div className="flex items-start gap-3 text-red-300 bg-red-500/10 p-4 rounded-xl border border-red-500/30">
                 <AlertCircle size={20} className="mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-semibold">Insufficient Credit Limit</p>
                   <p className="text-sm">
-                    You want to pre-authorize $
-                    {preAuthAmountValue.toLocaleString()}
-                    but only have $
-                    {preAuthData.available_credit.toLocaleString()} available.
+                    You need to pre-authorize ${requiredPreAuth.toLocaleString()}
+                    but only have ${preAuthData.available_credit.toLocaleString()} available.
                   </p>
                 </div>
               </div>
@@ -752,10 +707,13 @@ export default function BorrowingInterface({
           <button
             onClick={handleBorrow}
             disabled={
-              !preAuthAmount ||
-              preAuthAmountValue <= 0 ||
-              preAuthAmountValue > preAuthData.available_credit ||
-              isLoading
+              !linkCollateralAmount ||
+              linkCollateralAmountValue <= 0 ||
+              requiredPreAuth > preAuthData.available_credit ||
+              isLoading ||
+              !preAuthData.setupIntentId || // Disable if Stripe setup not ready
+              linkPrice <= 0 || // Disable if no valid price from contract
+              linkPriceSource === "error" // Disable if price fetch failed
             }
             className="w-full btn-gradient text-white py-4 px-6 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 flex items-center justify-center gap-3 shadow-lg"
           >
@@ -766,9 +724,7 @@ export default function BorrowingInterface({
               </>
             ) : (
               <>
-                Borrow{" "}
-                {preAuthAmountValue > 0 ? borrowAmountETH.toFixed(4) : "0"}{" "}
-                {selectedAsset}
+                Open {selectedLeverageRatio / 100}x Position
                 <ArrowRight size={20} />
               </>
             )}
@@ -779,54 +735,62 @@ export default function BorrowingInterface({
           <div className="card-gradient rounded-xl p-6 border border-white/10 hover:border-white/20 transition-colors">
             <div className="flex items-center gap-2 mb-6">
               <BarChart3 size={24} className="text-blue-400" />
-              <h3 className="font-bold text-white text-xl">Loan Summary</h3>
+              <h3 className="font-bold text-white text-xl">Position Summary</h3>
             </div>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-300">Borrowing:</span>
+                <span className="text-gray-300">Collateral Asset:</span>
                 <span className="font-medium text-white">
-                  ETH (Volatile Asset)
+                  LINK (Volatile Asset)
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-300">Collateral:</span>
+                <span className="text-gray-300">Borrowed Asset:</span>
                 <span className="font-medium text-white">
-                  USD Credit Limit (Stable)
+                  USDC (Stablecoin)
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-300">Available Credit:</span>
+                <span className="text-gray-300">Your Credit Limit:</span>
                 <span className="font-medium text-white">
-                  ${preAuthData.available_credit.toLocaleString()}
+                  ${preAuthData.available_credit.toLocaleString()} USD
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-300">Interest Rate:</span>
+                <span className="text-gray-300">Liquidation Threshold:</span>
                 <span className="font-medium text-white">
-                  {assets.find((a) => a.symbol === selectedAsset)?.rate}
+                  85%
                 </span>
               </div>
-              {preAuthAmountValue > 0 && (
+              {linkCollateralAmountValue > 0 && (
                 <>
                   <hr className="border-white/20" />
                   <div className="flex justify-between">
                     <span className="text-gray-300">
-                      USD Collateral Used:
+                      LINK Collateral:
                     </span>
                     <span className="text-yellow-300">
-                      ${preAuthAmountValue.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between font-semibold">
-                    <span className="text-gray-200">ETH You&apos;ll Receive:</span>
-                    <span className="text-blue-300">
-                      {borrowAmountETH.toFixed(4)} {selectedAsset}
+                      {linkCollateralAmountValue.toFixed(4)} LINK
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-200">Current ETH Value:</span>
+                    <span className="text-gray-300">
+                      Total LINK Exposure:
+                    </span>
                     <span className="text-blue-300">
-                      ${borrowAmountUSD.toLocaleString()}
+                      {totalSuppliedLINK.toFixed(4)} LINK
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-semibold">
+                    <span className="text-gray-200">USDC You&apos;ll Borrow:</span>
+                    <span className="text-blue-300">
+                      ${borrowedUSDC.toFixed(2)} {selectedAsset}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-200">Required Pre-Auth:</span>
+                    <span className="text-blue-300">
+                      ${requiredPreAuth.toLocaleString()} USD
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -834,22 +798,21 @@ export default function BorrowingInterface({
                     <span className="text-emerald-300">{collateralizationRatio.toFixed(0)}%</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-300">LTV Ratio:</span>
-                    <span className="text-amber-300">{actualLTV}%</span>
+                    <span className="text-gray-300">Leverage Ratio:</span>
+                    <span className="text-amber-300">{(selectedLeverageRatio / 100).toFixed(1)}x</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-400">Daily Interest:</span>
-                    <span className="text-gray-300">
-                      $
-                      {(
-                        (borrowAmountUSD *
-                          (parseFloat(
-                            assets.find((a) => a.symbol === selectedAsset)
-                              ?.rate || "4.5"
-                          ) /
-                            100)) /
-                        365
-                      ).toFixed(2)}
+                    <span className="text-gray-400">Liquidation Buffer:</span>
+                    <span className={`text-gray-300 ${
+                      liquidationPrice > 0 && linkPrice > 0 && liquidationPrice < linkPrice
+                        ? ((linkPrice - liquidationPrice) / linkPrice) * 100 > 15
+                          ? 'text-green-300'
+                          : 'text-yellow-300'
+                        : 'text-red-300'
+                    }`}>
+                      {liquidationPrice > 0 && linkPrice > 0 && liquidationPrice < linkPrice
+                        ? `${(((linkPrice - liquidationPrice) / linkPrice) * 100).toFixed(1)}%`
+                        : "Critical"}
                     </span>
                   </div>
                 </>
@@ -864,29 +827,29 @@ export default function BorrowingInterface({
             </div>
             <ul className="text-sm text-blue-200 space-y-2">
               <li className="flex items-start gap-2">
-                <DollarSign
+                <Link
                   size={14}
                   className="text-blue-400 mt-0.5 flex-shrink-0"
                 />
-                <span>Set pre-authorization amount (your collateral)</span>
+                <span>Set LINK collateral amount</span>
               </li>
               <li className="flex items-start gap-2">
                 <BarChart3
                   size={14}
                   className="text-blue-400 mt-0.5 flex-shrink-0"
                 />
-                <span>Choose LTV ratio to determine borrowing power</span>
+                <span>Choose leverage ratio to determine borrowing power</span>
               </li>
               <li className="flex items-start gap-2">
                 <Zap size={14} className="text-blue-400 mt-0.5 flex-shrink-0" />
-                <span>Instant transfer of borrowed ETH to your wallet</span>
+                <span>Instant transfer of borrowed USDC to your wallet</span>
               </li>
               <li className="flex items-start gap-2">
                 <TrendingUp
                   size={14}
                   className="text-blue-400 mt-0.5 flex-shrink-0"
                 />
-                <span>Interest accrues continuously at competitive rates</span>
+                <span>Position stays active until repaid or liquidated</span>
               </li>
               <li className="flex items-start gap-2">
                 <Shield
@@ -905,16 +868,16 @@ export default function BorrowingInterface({
             </div>
             <div className="space-y-3 text-sm text-amber-200">
               <p>
-                This demo uses Sepolia testnet with Chainlink price feeds for ETH
-                borrowing. Real-time liquidation monitoring ensures loan safety.
+                This demo uses Sepolia testnet with Chainlink price feeds for LINK
+                collateral and USDC borrowing. Real-time liquidation monitoring ensures loan safety.
                 Use test card 4242424242424242 for payments.
               </p>
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 mt-3">
                 <p className="text-amber-100 font-semibold text-xs mb-1">💡 How This Works:</p>
                 <p className="text-amber-200 text-xs leading-relaxed">
-                  You&apos;re borrowing ETH (volatile) against your USD credit limit (stable). 
-                  If ETH price rises significantly, your fixed USD collateral may not cover 
-                  the increased debt value, triggering liquidation protection.
+                  You&apos;re borrowing USDC (stable) against your LINK collateral (volatile). 
+                  If LINK price falls significantly, your volatile collateral may not cover 
+                  the fixed debt value, triggering liquidation protection.
                 </p>
               </div>
             </div>

@@ -13,9 +13,18 @@ export function useToast() {
 
   const addToast = useCallback(
     (type: "success" | "error" | "info", title: string, message: string) => {
-      const id = Math.random().toString(36).substring(2, 11);
+      const id = Date.now().toString() + Math.random().toString(36).substring(2, 5);
       const newToast: ToastNotification = { id, type, title, message };
-      setToasts((prev) => [...prev, newToast]);
+      setToasts((prev) => {
+        // Prevent duplicate toasts with same title and type
+        const existing = prev.find(toast => toast.title === title && toast.type === type);
+        if (existing) {
+          return prev; // Don't add duplicate
+        }
+        // Limit to 5 toasts maximum
+        const newToasts = [...prev, newToast];
+        return newToasts.slice(-5);
+      });
     },
     []
   );

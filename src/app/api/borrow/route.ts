@@ -32,29 +32,34 @@ export async function POST(request: NextRequest) {
     const borrowAmountUSD = parseFloat(amount);
     const borrowAmountETHNum = parseFloat(amountETH);
     const preAuthAmount = requiredPreAuth || Math.ceil(borrowAmountUSD / (selectedLTV / 100));
-    const interestRate = 4.5; // Simplified fixed rate
+    // const interestRate = 4.5; // Removed as no longer used in new contract
 
     // Demo mode - return simplified response
     if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
       const mockTxHash = "0x" + Math.random().toString(16).substring(2, 66);
       
       const loanData = {
+        // Loan interface fields
         id: loanId,
-        preAuthId: preAuthId || setupIntentId || `demo_${Date.now()}`,
         walletAddress,
-        customerId: customerId || "demo_customer",
-        paymentMethodId: paymentMethodId || "demo_payment_method",
-        borrowAmount: borrowAmountUSD,
-        borrowAmountETH: borrowAmountETHNum,
-        ethPriceAtCreation: ethPrice,
         asset: asset || "ETH",
-        interestRate,
-        ltvRatio: selectedLTV,
-        originalCreditLimit: 5000, // Mock value for demo
-        preAuthAmount,
         status: "active" as const,
         createdAt: new Date().toISOString(),
         txHash: mockTxHash,
+        // Position interface fields
+        collateralLINK: "0", // Mock value for old API
+        leverageRatio: 200, // Mock 2x leverage
+        borrowedUSDC: borrowAmountUSD.toString(),
+        suppliedLINK: "0", // Mock value for old API
+        entryPrice: ethPrice.toString(),
+        preAuthAmount: preAuthAmount.toString(),
+        openTimestamp: Math.floor(Date.now() / 1000),
+        preAuthExpiryTime: Math.floor(Date.now() / 1000) + 3600, // 1 hour
+        isActive: true,
+        preAuthCharged: false,
+        stripePaymentIntentId: preAuthId || setupIntentId || `demo_${Date.now()}`,
+        stripeCustomerId: customerId || "demo_customer",
+        stripePaymentMethodId: paymentMethodId || "demo_payment_method",
       };
 
       loanStorage.createLoan(loanData);

@@ -12,127 +12,137 @@ import { Loan } from "@/types";
 import {
   DollarSign,
   Loader,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Shield,
+  Clock,
+  BarChart3,
+  Zap,
+  Target,
+  CreditCard,
+  Eye,
 } from "lucide-react";
 import { useLoanStatus } from "@/hooks/useLoan";
 import { useContractOperations } from "@/hooks/useContract";
-import { getLoanDetails } from "@/lib/contract";
-import { ethers } from "ethers";
 import { useToast } from "@/hooks/useToast";
 import { LoanCard } from "@/components/loan/LoanCard";
 import { ToastContainer } from "@/components/loan/ToastSystem";
+import { getLINKPrice } from "@/lib/contract";
 
 interface LoanDashboardProps {
   walletAddress: string;
 }
 
-
-
 // Main dashboard component
 export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
-  const { loanInfo, loading: contractLoading, refetch, isRealTimeActive } = useLoanStatus();
-  const { repayLoan } = useContractOperations();
-  const [processingLoanId, setProcessingLoanId] = useState<string | null>(null);
+  const { positionInfo, loading: contractLoading, refetch, isRealTimeActive } = useLoanStatus();
+  const { closeLeveragePosition: contractCloseLeveragePosition } = useContractOperations();
+  const [isProcessingPosition, setIsProcessingPosition] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [detailedLoans, setDetailedLoans] = useState<Array<{
-    loanId: string;
-    details: {
-      borrower: string;
-      borrowedETH: ethers.BigNumber;
-      preAuthAmountUSD: ethers.BigNumber;
-      currentInterest: ethers.BigNumber;
-      totalRepayAmount: ethers.BigNumber;
-      createdAt: ethers.BigNumber;
-      preAuthExpiry: ethers.BigNumber;
-      isActive: boolean;
-      isExpired: boolean;
-    };
-  }>>([]);
+  const [currentLinkPrice, setCurrentLinkPrice] = useState<number>(0);
+  const [priceLoading, setPriceLoading] = useState(true);
 
-  // Fetch detailed loan data from blockchain
-  useEffect(() => {
-    async function fetchDetailedLoans() {
-      if (!loanInfo?.hasLoan || !loanInfo.loanIds) {
-        setDetailedLoans([]);
-        return;
-      }
-
-      try {
-        const detailsPromises = loanInfo.loanIds.map(async (loanId) => {
-          const details = await getLoanDetails(loanId);
-          return {
-            loanId,
-            details
-          };
-        });
-
-        const results = await Promise.all(detailsPromises);
-        setDetailedLoans(results);
-      } catch (error) {
-        console.error('Error fetching detailed loan data:', error);
-        setDetailedLoans([]);
-      }
+  // Fetch current LINK price
+  const fetchCurrentPrice = useCallback(async () => {
+    try {
+      setPriceLoading(true);
+      const priceString = await getLINKPrice();
+      const price = parseFloat(priceString) / 1e8; // Convert from 8 decimals
+      setCurrentLinkPrice(price);
+    } catch (error) {
+      console.error("Error fetching LINK price:", error);
+    } finally {
+      setPriceLoading(false);
     }
+  }, []);
 
-    fetchDetailedLoans();
-  }, [loanInfo?.loanIds, loanInfo?.hasLoan]);
+  // Effect to fetch price on mount and every 30 seconds
+  useEffect(() => {
+    fetchCurrentPrice();
+    const interval = setInterval(fetchCurrentPrice, 30000);
+    return () => clearInterval(interval);
+  }, [fetchCurrentPrice]);
 
-  // Memoize loan data with optimized calculations
-  const loans: Loan[] = useMemo(() => {
-    if (!loanInfo?.hasLoan || !detailedLoans.length) return [];
+  // Calculate position metrics
+  const positionMetrics = useMemo(() => {
+    if (!positionInfo?.position || currentLinkPrice === 0) return null;
 
-    return detailedLoans.map(({ loanId, details }) => {
-      // Optimized calculations with memoized conversions
-      const borrowedETH = parseFloat(details.borrowedETH.toString()) / 1e18;
-      const preAuthAmountUSD = parseFloat(details.preAuthAmountUSD.toString());
-      const ethPriceAtCreation = borrowedETH > 0 ? preAuthAmountUSD / (borrowedETH * 2) : 3500;
-      
-      const currentInterestETH = parseFloat(details.currentInterest.toString()) / 1e18;
-      const currentInterestUSD = currentInterestETH * ethPriceAtCreation;
-      
-      const totalRepayAmountETH = parseFloat(details.totalRepayAmount.toString()) / 1e18;
-      const totalRepayAmountUSD = totalRepayAmountETH * ethPriceAtCreation;
-      const borrowAmountUSD = borrowedETH * ethPriceAtCreation;
+    const position = positionInfo.position;
+    
+    // Parse contract values
+    const collateralLINK = parseFloat(position.collateralLINK) / 1e18;
+    const suppliedLINK = parseFloat(position.suppliedLINK) / 1e18;
+    const borrowedUSDC = parseFloat(position.borrowedUSDC) / 1e6;
+    const entryPrice = parseFloat(position.entryPrice) / 1e8;
+    const preAuthAmount = parseFloat(position.preAuthAmount) / 1e6;
+    
+    // Calculate current values
+    const currentCollateralValue = collateralLINK * currentLinkPrice;
+    const currentSuppliedValue = suppliedLINK * currentLinkPrice;
+    const entryCollateralValue = collateralLINK * entryPrice;
+    
+    // Calculate P&L (correct for leverage positions)
+    const entrySuppliedValue = suppliedLINK * entryPrice;
+    const unrealizedPnL = currentSuppliedValue - entrySuppliedValue;
+    const unrealizedPnLPercent = entryCollateralValue > 0 ? (unrealizedPnL / entryCollateralValue) * 100 : 0;
+    
+    // Calculate liquidation price (borrowedUSDC / (suppliedLINK * 0.85))
+    const liquidationPrice = suppliedLINK > 0 ? borrowedUSDC / (suppliedLINK * 0.85) : 0;
+    
+    // Calculate health factor (correct for supplied position)
+    const healthFactor = borrowedUSDC > 0 ? (currentSuppliedValue * 0.85) / borrowedUSDC : 0;
+    
+    // Calculate time remaining until pre-auth expiry
+    const timeRemaining = Math.max(0, position.preAuthExpiryTime - Math.floor(Date.now() / 1000));
+    
+    return {
+      collateralLINK,
+      suppliedLINK,
+      borrowedUSDC,
+      entryPrice,
+      currentPrice: currentLinkPrice,
+      preAuthAmount,
+      currentCollateralValue,
+      currentSuppliedValue,
+      entryCollateralValue,
+      unrealizedPnL,
+      unrealizedPnLPercent,
+      liquidationPrice,
+      healthFactor,
+      timeRemaining,
+      leverageRatio: position.leverageRatio / 100,
+      isAtRisk: healthFactor < 1.2, // Risk if health factor below 1.2
+      priceChange: entryPrice > 0 ? ((currentLinkPrice - entryPrice) / entryPrice) * 100 : 0,
+    };
+  }, [positionInfo?.position, currentLinkPrice]);
 
-      return {
-        id: loanId,
-        preAuthId: "contract_preauth",
-        walletAddress,
-        customerId: "",
-        paymentMethodId: "",
-        borrowAmount: borrowAmountUSD,
-        borrowAmountETH: borrowedETH,
-        ethPriceAtCreation: ethPriceAtCreation,
-        asset: "ETH",
-        interestRate: 10,
-        ltvRatio: 50,
-        originalCreditLimit: 5000,
-        preAuthAmount: preAuthAmountUSD,
-        status: !details.isActive ? "repaid" : (details.isExpired ? "defaulted" : "active"),
-        createdAt: new Date(details.createdAt.toNumber() * 1000).toISOString(),
-        preAuthCreatedAt: new Date(details.createdAt.toNumber() * 1000).toISOString(),
-        preAuthExpiresAt: new Date(details.preAuthExpiry.toNumber() * 1000).toISOString(),
-        txHash: "",
-        blockchainInterest: Math.max(0, currentInterestUSD),
-        blockchainRepayAmount: Math.max(borrowAmountUSD, totalRepayAmountUSD),
-      };
-    });
-  }, [detailedLoans, walletAddress, loanInfo?.hasLoan]);
+  // Memoize position data with optimized calculations
+  const currentPosition: Loan | null = useMemo(() => {
+    if (!positionInfo?.hasActivePosition || !positionInfo.position) return null;
 
-  // Memoize loan categories for better performance
-  const { activeLoans, completedLoans } = useMemo(() => {
-    const active = loans.filter((loan) => loan.status === "active");
-    const completed = loans.filter((loan) => loan.status !== "active");
-    return { activeLoans: active, completedLoans: completed };
-  }, [loans]);
+    const position = positionInfo.position;
 
+    // No processing needed - just pass through the position data with UI fields
+
+    return {
+      ...position,
+      id: walletAddress, // Using wallet address as ID for single position
+      walletAddress,
+      asset: "USDC", // Borrowed asset
+      status: position.isActive ? "active" : (position.preAuthCharged ? "defaulted" : "repaid"), // Simplified status
+      createdAt: new Date(position.openTimestamp * 1000).toISOString(),
+    };
+  }, [positionInfo?.position, positionInfo?.hasActivePosition, walletAddress]);
 
   const isLoading = contractLoading;
 
   // Debounced refresh function to prevent repeated calls
   const debouncedRefetch = useCallback(() => {
-    if (isRefreshing) return; // Prevent multiple simultaneous calls
+    // Don't refresh if position is already closed
+    if (!positionInfo?.hasActivePosition || isRefreshing) return;
     
     if (refreshTimeoutRef.current) {
       clearTimeout(refreshTimeoutRef.current);
@@ -147,7 +157,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
         refreshTimeoutRef.current = null;
       }
     }, 300); // 300ms debounce
-  }, [refetch, isRefreshing]);
+  }, [refetch, isRefreshing, positionInfo?.hasActivePosition]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -158,46 +168,42 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
     };
   }, []);
 
-  const handleRepay = useCallback(
-    async (loanId: string) => {
+  const handleClosePosition = useCallback(
+    async () => {
       addToast(
         "info",
         "Processing...",
-        "Repaying loan on blockchain."
+        "Closing position on blockchain."
       );
 
-      setProcessingLoanId(loanId);
+      setIsProcessingPosition(true);
       try {
-        // Repay the specific loan on blockchain
-        const receipt = await repayLoan(loanId);
+        const receipt = await contractCloseLeveragePosition();
 
         addToast(
           "success",
-          "Loan Repaid Successfully!",
-          `Loan ID: ${loanId.substring(
-            0,
-            8
-          )}... Transaction: ${receipt.transactionHash.substring(
+          "Position Closed Successfully!",
+          `Transaction: ${receipt.transactionHash.substring(
             0,
             10
           )}...`
         );
 
-        await refetch(); // Refresh blockchain data
+        // Refresh blockchain data and clear any intervals
+        await refetch();
       } catch (error) {
         addToast(
           "error",
-          "Repayment Failed",
+          "Position Closure Failed",
           (error as Error).message ||
-            "Failed to repay the loan. Please try again."
+            "Failed to close the position. Please try again."
         );
       } finally {
-        setProcessingLoanId(null);
+        setIsProcessingPosition(false);
       }
     },
-    [addToast, repayLoan, refetch]
+    [addToast, contractCloseLeveragePosition, refetch]
   );
-
 
   useEffect(() => {
     if (walletAddress) {
@@ -205,14 +211,14 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
     }
   }, [walletAddress, debouncedRefetch]);
 
-  if (isLoading && loans.length === 0) {
+  if (isLoading && !positionInfo?.hasActivePosition) {
     return (
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <DollarSign size={32} className="text-blue-400" />
             <h2 className="text-3xl font-bold gradient-text">
-              Loan Management
+              Position Management
             </h2>
           </div>
           <div className="animate-pulse bg-white/10 rounded-lg h-10 w-20"></div>
@@ -221,7 +227,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
         <div className="glassmorphism rounded-2xl p-8 border border-white/20">
           <div className="flex items-center justify-center">
             <Loader className="animate-spin text-blue-400" size={32} />
-            <span className="ml-3 text-white">Loading your loans...</span>
+            <span className="ml-3 text-white">Loading your position...</span>
           </div>
         </div>
       </div>
@@ -236,7 +242,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
           <div className="flex items-center gap-3">
             <DollarSign size={32} className="text-blue-400" />
             <h2 className="text-3xl font-bold gradient-text">
-              Loan Management
+              Position Management
             </h2>
             {isRealTimeActive && (
               <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/20 border border-green-500/30">
@@ -247,74 +253,265 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
           </div>
         </div>
 
-        {loans.length === 0 ? (
+        {!positionInfo?.hasActivePosition ? (
           <div className="glassmorphism rounded-2xl p-12 text-center border border-white/20 bg-gradient-to-br from-slate-900/40 to-gray-900/40">
             <div className="w-20 h-20 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-blue-500/30">
               <DollarSign className="text-blue-400" size={36} />
             </div>
             <h3 className="text-2xl font-bold text-white mb-3 gradient-text">
-              No Active Loans
+              No Active Position
             </h3>
             <p className="text-gray-400 text-lg max-w-md mx-auto leading-relaxed">
-              You haven&apos;t created any loans yet. Start borrowing against your
-              credit card to see them here.
+              You haven&apos;t opened a leveraged position yet. Open one to see it here.
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
-            {activeLoans.length > 0 && (
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-2 h-8 bg-gradient-to-b from-emerald-500 to-green-600 rounded-full"></div>
-                  <h3 className="text-xl font-bold text-white">Active Loans</h3>
-                  <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 rounded-full text-sm font-medium border border-emerald-500/30">
-                    {activeLoans.length}
-                  </span>
+          <div className="flex flex-col gap-6">
+            {/* Position Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-8 bg-gradient-to-b from-emerald-500 to-green-600 rounded-full"></div>
+                <h3 className="text-xl font-bold text-white">Your Active Position</h3>
+                <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 rounded-full text-sm font-medium border border-emerald-500/30">
+                  Active
+                </span>
+              </div>
+              {positionMetrics && (
+                <div className="flex items-center gap-2">
+                  <div className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${
+                    positionMetrics.isAtRisk 
+                      ? 'bg-red-500/20 text-red-300 border border-red-500/30' 
+                      : 'bg-green-500/20 text-green-300 border border-green-500/30'
+                  }`}>
+                    {positionMetrics.isAtRisk ? <AlertTriangle size={14} /> : <Shield size={14} />}
+                    {positionMetrics.isAtRisk ? 'At Risk' : 'Healthy'}
+                  </div>
                 </div>
-                <div className="grid gap-4">
-                  {activeLoans.map((loan) => (
-                    <LoanCard
-                      key={loan.id}
-                      loan={loan}
-                      onRepay={handleRepay}
-                      isProcessing={processingLoanId === loan.id}
-                      loanInfo={loanInfo ? {
-                        lastUpdated: loanInfo.lastUpdated,
-                        isUpdating: loanInfo.isUpdating
-                      } : undefined}
-                    />
-                  ))}
+              )}
+            </div>
+
+            {/* Position Metrics Grid */}
+            {positionMetrics && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                {/* Current Price Card */}
+                <div className="glassmorphism rounded-xl p-4 border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-cyan-500/10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <TrendingUp size={16} className="text-blue-400" />
+                    <span className="text-blue-200 text-sm font-medium">Current LINK Price</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-bold text-white">
+                      ${positionMetrics.currentPrice.toFixed(2)}
+                    </span>
+                    {priceLoading && <Loader className="animate-spin text-blue-400" size={16} />}
+                  </div>
+                  <div className={`text-sm flex items-center gap-1 ${
+                    positionMetrics.priceChange >= 0 ? 'text-green-400' : 'text-red-400'
+                  }`}>
+                    {positionMetrics.priceChange >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                    {positionMetrics.priceChange >= 0 ? '+' : ''}{positionMetrics.priceChange.toFixed(2)}%
+                  </div>
+                </div>
+
+                {/* P&L Card */}
+                <div className={`glassmorphism rounded-xl p-4 border ${
+                  positionMetrics.unrealizedPnL >= 0 
+                    ? 'border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10'
+                    : 'border-red-500/20 bg-gradient-to-br from-red-500/10 to-pink-500/10'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <BarChart3 size={16} className={positionMetrics.unrealizedPnL >= 0 ? "text-green-400" : "text-red-400"} />
+                    <span className={`text-sm font-medium ${positionMetrics.unrealizedPnL >= 0 ? "text-green-200" : "text-red-200"}`}>
+                      Unrealized P&L
+                    </span>
+                  </div>
+                  <div className="text-2xl font-bold text-white">
+                    {positionMetrics.unrealizedPnL >= 0 ? '+' : ''}${positionMetrics.unrealizedPnL.toFixed(2)}
+                  </div>
+                  <div className={`text-sm ${positionMetrics.unrealizedPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {positionMetrics.unrealizedPnLPercent >= 0 ? '+' : ''}{positionMetrics.unrealizedPnLPercent.toFixed(2)}%
+                  </div>
+                </div>
+
+                {/* Health Factor Card */}
+                <div className={`glassmorphism rounded-xl p-4 border ${
+                  positionMetrics.healthFactor >= 1.5 
+                    ? 'border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10'
+                    : positionMetrics.healthFactor >= 1.2
+                    ? 'border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-orange-500/10'
+                    : 'border-red-500/20 bg-gradient-to-br from-red-500/10 to-pink-500/10'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield size={16} className={
+                      positionMetrics.healthFactor >= 1.5 ? "text-green-400" 
+                      : positionMetrics.healthFactor >= 1.2 ? "text-yellow-400" 
+                      : "text-red-400"
+                    } />
+                    <span className={`text-sm font-medium ${
+                      positionMetrics.healthFactor >= 1.5 ? "text-green-200" 
+                      : positionMetrics.healthFactor >= 1.2 ? "text-yellow-200" 
+                      : "text-red-200"
+                    }`}>Health Factor</span>
+                  </div>
+                  <div className="text-2xl font-bold text-white">
+                    {positionMetrics.healthFactor.toFixed(2)}
+                  </div>
+                  <div className={`text-sm ${
+                    positionMetrics.healthFactor >= 1.5 ? 'text-green-400' 
+                    : positionMetrics.healthFactor >= 1.2 ? 'text-yellow-400' 
+                    : 'text-red-400'
+                  }`}>
+                    {positionMetrics.healthFactor >= 1.5 ? 'Safe' 
+                     : positionMetrics.healthFactor >= 1.2 ? 'Moderate' 
+                     : 'At Risk'}
+                  </div>
+                </div>
+
+                {/* Liquidation Price Card */}
+                <div className="glassmorphism rounded-xl p-4 border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-orange-500/10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Target size={16} className="text-amber-400" />
+                    <span className="text-amber-200 text-sm font-medium">Liquidation Price</span>
+                  </div>
+                  <div className="text-2xl font-bold text-white">
+                    ${positionMetrics.liquidationPrice.toFixed(2)}
+                  </div>
+                  <div className={`text-sm ${
+                    positionMetrics.currentPrice > positionMetrics.liquidationPrice * 1.2 
+                      ? 'text-green-400' : 'text-amber-400'
+                  }`}>
+                    {(((positionMetrics.currentPrice - positionMetrics.liquidationPrice) / positionMetrics.currentPrice) * 100).toFixed(1)}% buffer
+                  </div>
                 </div>
               </div>
             )}
 
-            {completedLoans.length > 0 && (
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center gap-3 mb-4 mt-8">
-                  <div className="w-2 h-8 bg-gradient-to-b from-gray-500 to-slate-600 rounded-full"></div>
-                  <h3 className="text-xl font-bold text-white">
-                    Completed Loans
-                  </h3>
-                  <span className="px-3 py-1 bg-gray-500/20 text-gray-300 rounded-full text-sm font-medium border border-gray-500/30">
-                    {completedLoans.length}
-                  </span>
+            {/* Position Details Grid */}
+            {positionMetrics && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                {/* Collateral Information */}
+                <div className="glassmorphism rounded-xl p-6 border border-white/20">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Zap size={20} className="text-blue-400" />
+                    <h4 className="text-lg font-bold text-white">Collateral & Leverage</h4>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-300">Initial Collateral:</span>
+                      <span className="text-white font-medium">{positionMetrics.collateralLINK.toFixed(4)} LINK</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-300">Total Supplied:</span>
+                      <span className="text-white font-medium">{positionMetrics.suppliedLINK.toFixed(4)} LINK</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-300">Borrowed Amount:</span>
+                      <span className="text-white font-medium">${positionMetrics.borrowedUSDC.toFixed(2)} USDC</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-300">Leverage Ratio:</span>
+                      <span className="text-blue-300 font-bold">{positionMetrics.leverageRatio.toFixed(1)}x</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-white/10">
+                      <span className="text-gray-300">Current Value:</span>
+                      <span className="text-green-300 font-bold">${positionMetrics.currentSuppliedValue.toFixed(2)}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="grid gap-4">
-                  {completedLoans.map((loan) => (
-                    <LoanCard
-                      key={loan.id}
-                      loan={loan}
-                      onRepay={handleRepay}
-                      isProcessing={processingLoanId === loan.id}
-                      loanInfo={loanInfo ? {
-                        lastUpdated: loanInfo.lastUpdated,
-                        isUpdating: loanInfo.isUpdating
-                      } : undefined}
-                    />
-                  ))}
+
+                {/* Payment & Timeline */}
+                <div className="glassmorphism rounded-xl p-6 border border-white/20">
+                  <div className="flex items-center gap-2 mb-4">
+                    <CreditCard size={20} className="text-purple-400" />
+                    <h4 className="text-lg font-bold text-white">Payment & Timeline</h4>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-300">Pre-Auth Amount:</span>
+                      <span className="text-white font-medium">${positionMetrics.preAuthAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-300">Pre-Auth Status:</span>
+                      <span className={`font-medium ${
+                        positionInfo?.position?.preAuthCharged ? 'text-red-300' : 'text-green-300'
+                      }`}>
+                        {positionInfo?.position?.preAuthCharged ? 'Charged' : 'Active Hold'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-300">Entry Price:</span>
+                      <span className="text-white font-medium">${positionMetrics.entryPrice.toFixed(2)}</span>
+                    </div>
+                    {positionMetrics.timeRemaining > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-300">Time Remaining:</span>
+                        <div className="flex items-center gap-1">
+                          <Clock size={14} className="text-amber-400" />
+                          <span className="text-amber-300 font-medium">
+                            {Math.floor(positionMetrics.timeRemaining / 3600)}h {Math.floor((positionMetrics.timeRemaining % 3600) / 60)}m
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="pt-2 border-t border-white/10">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-300">Position Age:</span>
+                        <span className="text-blue-300 font-medium">
+                          {Math.floor((Date.now() / 1000 - (positionInfo?.position?.openTimestamp || 0)) / 86400)}d {Math.floor(((Date.now() / 1000 - (positionInfo?.position?.openTimestamp || 0)) % 86400) / 3600)}h
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-4">
+              <button
+                onClick={handleClosePosition}
+                disabled={isProcessingPosition}
+                className="flex-1 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 disabled:from-gray-600 disabled:to-gray-700 text-white py-3 px-6 rounded-xl font-semibold transition-all transform hover:scale-105 disabled:hover:scale-100 flex items-center justify-center gap-2 shadow-lg"
+              >
+                {isProcessingPosition ? (
+                  <>
+                    <Loader className="animate-spin" size={16} />
+                    Closing Position...
+                  </>
+                ) : (
+                  <>
+                    <Zap size={16} />
+                    Close Position
+                  </>
+                )}
+              </button>
+              <button
+                onClick={debouncedRefetch}
+                disabled={isRefreshing}
+                className="px-6 py-3 glassmorphism border border-white/20 hover:border-white/30 text-white rounded-xl font-semibold transition-all flex items-center gap-2"
+              >
+                {isRefreshing ? (
+                  <Loader className="animate-spin" size={16} />
+                ) : (
+                  <Eye size={16} />
+                )}
+                Refresh
+              </button>
+            </div>
+
+            {/* Original Loan Card for detailed view */}
+            <div className="border-t border-white/10 pt-6">
+              <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <BarChart3 size={18} className="text-blue-400" />
+                Detailed View
+              </h4>
+              <LoanCard
+                key={currentPosition!.id}
+                loan={currentPosition!}
+                onRepay={handleClosePosition}
+                isProcessing={isProcessingPosition}
+              />
+            </div>
           </div>
         )}
       </div>

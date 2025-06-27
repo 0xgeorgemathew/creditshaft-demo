@@ -484,7 +484,6 @@ export default function Home() {
                   {activeTab === "borrow" && (
                     <BorrowingInterface
                       preAuthData={preAuthData}
-                      walletAddress={address}
                       onBorrowSuccess={handleBorrowSuccess}
                     />
                   )}

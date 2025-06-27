@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { borrowETH, repayLoan, addLiquidity, removeLiquidity, getErrorMessage, getUserLPBalance } from '@/lib/contract';
+import { openLeveragePosition, closeLeveragePosition, addLiquidity, removeLiquidity, getErrorMessage, getUserLPBalance } from '@/lib/contract';
 import { useAccount } from 'wagmi';
 
 
@@ -8,9 +8,10 @@ export const useContractOperations = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleBorrowETH = async (params: {
-    preAuthAmountUSD: number;
-    preAuthDurationMinutes: number;
+  const handleOpenLeveragePosition = async (params: {
+    leverageRatio: number;
+    collateralLINK: string;
+    expiryDuration: number;
     stripePaymentIntentId: string;
     stripeCustomerId: string;
     stripePaymentMethodId: string;
@@ -19,7 +20,7 @@ export const useContractOperations = () => {
     setError(null);
 
     try {
-      const receipt = await borrowETH(params);
+      const receipt = await openLeveragePosition(params);
       return receipt;
     } catch (err: unknown) {
       const errorMessage = getErrorMessage(err);
@@ -30,18 +31,12 @@ export const useContractOperations = () => {
     }
   };
 
-  const handleRepayLoan = async (loanId: string) => {
+  const handleCloseLeveragePosition = async () => {
     setLoading(true);
     setError(null);
 
-    if (!loanId) {
-      const errorMessage = "Loan ID is required for repayment";
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    }
-
     try {
-      const receipt = await repayLoan(loanId);
+      const receipt = await closeLeveragePosition();
       return receipt;
     } catch (err: unknown) {
       const errorMessage = getErrorMessage(err);
@@ -103,8 +98,8 @@ export const useContractOperations = () => {
   };
 
   return {
-    borrowETH: handleBorrowETH,
-    repayLoan: handleRepayLoan,
+    openLeveragePosition: handleOpenLeveragePosition,
+    closeLeveragePosition: handleCloseLeveragePosition,
     addLiquidity: handleAddLiquidity,
     removeLiquidity: handleRemoveLiquidity,
     loading,

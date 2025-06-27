@@ -71,20 +71,20 @@ class LoanStorage {
       };
     }
 
-    // Use the most recent loan's credit limit as the total
+    // Use a default credit limit since originalCreditLimit was removed
     // In production, this would be fetched from Stripe or stored separately
-    const totalCreditLimit = loans[0]?.originalCreditLimit || 0;
+    const totalCreditLimit = 5000; // Default mock credit limit
 
     const activeLoans = loans.filter((loan) => loan.status === "active");
 
     const totalBorrowed = activeLoans.reduce(
-      (sum, loan) => sum + loan.borrowAmount,
+      (sum, loan) => sum + parseFloat(loan.borrowedUSDC),
       0
     );
 
     // Available credit = total limit - currently pre-authorized amounts
     const currentPreAuths = activeLoans.reduce(
-      (sum, loan) => sum + loan.preAuthAmount,
+      (sum, loan) => sum + parseFloat(loan.preAuthAmount) / 1e6,
       0
     );
     const availableCredit = Math.max(0, totalCreditLimit - currentPreAuths);

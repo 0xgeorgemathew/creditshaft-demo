@@ -2,47 +2,52 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Position, PositionStats } from "@/types";
-import { getPosition, closePosition, getLinkPrice } from "@/lib/contract";
+import { getPositionDetails, closeLeveragePosition, getLINKPrice } from "@/lib/contract";
 import { useAccount } from "wagmi";
 import { 
-    Loader, AlertCircle, BarChart3, Shield
+    AlertCircle, BarChart3, Shield
 } from "lucide-react";
 
-// Helper to calculate position stats
+// Helper to calculate position stats with proper decimal handling
 const calculateStats = (position: Position, currentLinkPrice: number): PositionStats => {
-    const collateralUSD = parseFloat(position.collateralLINK) * parseFloat(position.entryPrice);
-    const currentCollateralUSD = parseFloat(position.collateralLINK) * currentLinkPrice;
-    const totalExposureLINK = parseFloat(position.suppliedLINK);
-    const totalExposureUSD = totalExposureLINK * currentLinkPrice;
-    const borrowedUSD = parseFloat(position.borrowedUSDC);
-    const pnl = totalExposureUSD - (collateralUSD + borrowedUSD);
-
-    const unrealizedPnL_USD = pnl.toFixed(2);
-    const unrealizedPnL_Percent = (((pnl) / collateralUSD) * 100).toFixed(2);
-
-    // Simplified liquidation price calculation
-    const liquidationPrice = (borrowedUSD / totalExposureLINK * 1.05).toFixed(2); // with 5% buffer
+    // Parse position data with correct decimals
+    const collateralLINK = parseFloat(position.collateralLINK) / 1e18; // 18 decimals
+    const suppliedLINK = parseFloat(position.suppliedLINK) / 1e18; // 18 decimals
+    const borrowedUSDC = parseFloat(position.borrowedUSDC) / 1e6; // 6 decimals
+    const entryPrice = parseFloat(position.entryPrice) / 1e8; // 8 decimals
+    
+    // Calculate values at entry and current prices
+    const initialCollateralUSD = collateralLINK * entryPrice;
+    const currentCollateralUSD = collateralLINK * currentLinkPrice;
+    const totalExposureUSD = suppliedLINK * currentLinkPrice;
+    const initialTotalExposureUSD = suppliedLINK * entryPrice;
+    
+    // Correct P&L calculation for leverage positions
+    // P&L = (current_total_value - initial_total_value) - borrowed_amount_change
+    // Since borrowed amount stays constant, P&L = current_total_value - initial_total_value
+    const pnl = totalExposureUSD - initialTotalExposureUSD;
+    
+    // Calculate health factor based on 85% liquidation threshold
+    const liquidationThreshold = 0.85;
+    const healthFactor = totalExposureUSD > 0 ? (totalExposureUSD * liquidationThreshold) / borrowedUSDC : 0;
+    
+    // Liquidation price calculation
+    const liquidationPrice = suppliedLINK > 0 ? borrowedUSDC / (suppliedLINK * liquidationThreshold) : 0;
 
     const now = Math.floor(Date.now() / 1000);
     const timeRemaining = position.preAuthExpiryTime - now;
-    let preAuthStatus: "Active" | "Expired" | "Charged" = "Active";
-    if (position.preAuthCharged) {
-        preAuthStatus = "Charged";
-    } else if (timeRemaining <= 0) {
-        preAuthStatus = "Expired";
-    }
 
     return {
-        unrealizedPnL_USD,
-        unrealizedPnL_Percent,
-        totalExposure_USD: totalExposureUSD.toFixed(2),
-        totalExposure_LINK: totalExposureLINK.toFixed(4),
-        borrowedAmount_USD: borrowedUSD.toFixed(2),
-        collateralValue_USD: currentCollateralUSD.toFixed(2),
+        collateralUSD: currentCollateralUSD,
+        currentCollateralUSD,
+        totalExposureLINK: suppliedLINK,
+        totalExposureUSD,
+        unrealizedPnL: pnl,
+        unrealizedPnLPercent: initialCollateralUSD > 0 ? (pnl / initialCollateralUSD) * 100 : 0,
         liquidationPrice,
-        preAuthStatus,
+        healthFactor,
         timeRemaining,
-        healthFactor: "1.5" // Placeholder
+        isAtRisk: healthFactor < 1.1 // At risk if health factor < 1.1
     };
 };
 
@@ -58,21 +63,30 @@ export default function PositionDashboard() {
     const fetchData = useCallback(async () => {
         if (!address) return;
         try {
-            const [pos, price] = await Promise.all([
-                getPosition(address),
-                getLinkPrice(),
+            const [pos, priceString] = await Promise.all([
+                getPositionDetails(address),
+                getLINKPrice(),
             ]);
+            const price = parseFloat(priceString) / 1e8; // Convert from 8 decimals
             setPosition(pos);
             setLinkPrice(price);
-            if (pos) {
+            if (pos && pos.isActive) {
                 setStats(calculateStats(pos, price));
+            } else {
+                // Position is not active (closed), clear everything
+                setPosition(null);
+                setStats(null);
             }
+            setError(null); // Clear any previous errors on successful fetch
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : "An unknown error occurred.");
+            // Only set error if we don't already have a closed position
+            if (position === null || (position && position.isActive)) {
+                setError(err instanceof Error ? err.message : "An unknown error occurred.");
+            }
         } finally {
             setLoading(false);
         }
-    }, [address]);
+    }, [address, position]);
 
     useEffect(() => {
         fetchData();
@@ -84,8 +98,9 @@ export default function PositionDashboard() {
         setIsClosing(true);
         setError(null);
         try {
-            await closePosition();
+            await closeLeveragePosition();
             setPosition(null); // Optimistically clear position
+            setStats(null); // Clear stats to prevent calculations on null position
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "An unknown error occurred.");
         } finally {
@@ -125,19 +140,19 @@ export default function PositionDashboard() {
             
             {stats && (
                 <div className="grid md:grid-cols-3 gap-8 mb-8">
-                    <div className={`p-4 rounded-xl ${parseFloat(stats.unrealizedPnL_USD) >= 0 ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+                    <div className={`p-4 rounded-xl ${stats.unrealizedPnL >= 0 ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
                         <p className="text-sm text-gray-300">Unrealized P&L</p>
-                        <p className={`text-2xl font-bold ${parseFloat(stats.unrealizedPnL_USD) >= 0 ? 'text-green-300' : 'text-red-300'}`}>${stats.unrealizedPnL_USD}</p>
-                        <p className={`text-sm ${parseFloat(stats.unrealizedPnL_Percent) >= 0 ? 'text-green-400' : 'text-red-400'}`}>{stats.unrealizedPnL_Percent}%</p>
+                        <p className={`text-2xl font-bold ${stats.unrealizedPnL >= 0 ? 'text-green-300' : 'text-red-300'}`}>${stats.unrealizedPnL.toFixed(2)}</p>
+                        <p className={`text-sm ${stats.unrealizedPnLPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>{stats.unrealizedPnLPercent.toFixed(2)}%</p>
                     </div>
                     <div className="p-4 rounded-xl bg-blue-500/10">
                         <p className="text-sm text-gray-300">Total Exposure</p>
-                        <p className="text-2xl font-bold text-blue-300">${stats.totalExposure_USD}</p>
-                        <p className="text-sm text-blue-400">{stats.totalExposure_LINK} LINK</p>
+                        <p className="text-2xl font-bold text-blue-300">${stats.totalExposureUSD.toFixed(2)}</p>
+                        <p className="text-sm text-blue-400">{stats.totalExposureLINK.toFixed(4)} LINK</p>
                     </div>
                     <div className="p-4 rounded-xl bg-purple-500/10">
                         <p className="text-sm text-gray-300">Liquidation Price</p>
-                        <p className="text-2xl font-bold text-purple-300">${stats.liquidationPrice}</p>
+                        <p className="text-2xl font-bold text-purple-300">${stats.liquidationPrice.toFixed(2)}</p>
                         <p className="text-sm text-purple-400">Current: ${linkPrice.toFixed(2)}</p>
                     </div>
                 </div>
@@ -147,18 +162,18 @@ export default function PositionDashboard() {
                 <div className="card-gradient p-6 rounded-xl border border-white/10">
                     <h4 className="font-bold text-white text-xl mb-4 flex items-center gap-2"><BarChart3/> Position Details</h4>
                     <div className="space-y-2 text-sm">
-                        <div className="flex justify-between"><span className="text-gray-300">Collateral:</span><span className="font-mono">{parseFloat(position.collateralLINK).toFixed(4)} LINK</span></div>
+                        <div className="flex justify-between"><span className="text-gray-300">Collateral:</span><span className="font-mono">{(parseFloat(position.collateralLINK) / 1e18).toFixed(4)} LINK</span></div>
                         <div className="flex justify-between"><span className="text-gray-300">Leverage:</span><span className="font-mono">{position.leverageRatio / 100}x</span></div>
-                        <div className="flex justify-between"><span className="text-gray-300">Entry Price:</span><span className="font-mono">${parseFloat(position.entryPrice).toFixed(2)}</span></div>
-                        <div className="flex justify-between"><span className="text-gray-300">Borrowed:</span><span className="font-mono">${parseFloat(position.borrowedUSDC).toFixed(2)} USDC</span></div>
+                        <div className="flex justify-between"><span className="text-gray-300">Entry Price:</span><span className="font-mono">${(parseFloat(position.entryPrice) / 1e8).toFixed(2)}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-300">Borrowed:</span><span className="font-mono">${(parseFloat(position.borrowedUSDC) / 1e6).toFixed(3)} USDC</span></div>
                     </div>
                 </div>
                 <div className="card-gradient p-6 rounded-xl border border-white/10">
                     <h4 className="font-bold text-white text-xl mb-4 flex items-center gap-2"><Shield/> Pre-Auth Status</h4>
                     {stats && (
                         <div className="space-y-2 text-sm">
-                            <div className="flex justify-between"><span className="text-gray-300">Status:</span><span className={`font-bold ${stats.preAuthStatus === 'Active' ? 'text-green-300' : 'text-amber-300'}`}>{stats.preAuthStatus}</span></div>
-                            <div className="flex justify-between"><span className="text-gray-300">Amount:</span><span className="font-mono">${parseFloat(position.preAuthAmount).toFixed(2)}</span></div>
+                            <div className="flex justify-between"><span className="text-gray-300">Status:</span><span className={`font-bold ${position.isActive ? 'text-green-300' : 'text-amber-300'}`}>{position.isActive ? 'Active' : 'Closed'}</span></div>
+                            <div className="flex justify-between"><span className="text-gray-300">Amount:</span><span className="font-mono">${(parseFloat(position.preAuthAmount) / 1e6).toFixed(2)}</span></div>
                             <div className="flex justify-between"><span className="text-gray-300">Time Remaining:</span><span className="font-mono">{stats.timeRemaining > 0 ? new Date(stats.timeRemaining * 1000).toISOString().substr(11, 8) : 'Expired'}</span></div>
                         </div>
                     )}

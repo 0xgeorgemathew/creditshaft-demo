@@ -22,17 +22,12 @@ import {
   Zap,
   CreditCard,
 } from "lucide-react";
-import { BlockchainDataDisplay } from "./BlockchainDataDisplay";
 import { useInterval } from "@/hooks/useInterval";
 
 interface LoanCardProps {
   loan: Loan;
   onRepay: (loanId: string) => void;
   isProcessing: boolean;
-  loanInfo?: {
-    lastUpdated?: number;
-    isUpdating?: boolean;
-  };
 }
 
 export const LoanCard = memo(
@@ -40,7 +35,6 @@ export const LoanCard = memo(
     loan,
     onRepay,
     isProcessing,
-    loanInfo,
   }: LoanCardProps) {
     const [showDetails, setShowDetails] = useState(false);
     const [timeRemaining, setTimeRemaining] = useState<string>("");
@@ -48,8 +42,8 @@ export const LoanCard = memo(
 
     // Memoize expiry timestamp to avoid repeated parsing
     const expiryTimestamp = useMemo(() => {
-      return loan.preAuthExpiresAt ? new Date(loan.preAuthExpiresAt).getTime() : 0;
-    }, [loan.preAuthExpiresAt]);
+      return loan.preAuthExpiryTime ? loan.preAuthExpiryTime * 1000 : 0; // Convert seconds to milliseconds
+    }, [loan.preAuthExpiryTime]);
 
     // Optimized countdown calculation
     const updateCountdown = useCallback(() => {
@@ -89,8 +83,8 @@ export const LoanCard = memo(
 
     // Use centralized interval for countdown updates
     useInterval(
-      loan.status === "active" ? updateCountdown : null,
-      1000
+      loan.status === "active" ? updateCountdown : () => {},
+      loan.status === "active" ? 1000 : null
     );
 
     // Initialize countdown on mount
@@ -151,20 +145,15 @@ export const LoanCard = memo(
             </div>
             <div className="space-y-1">
               <h3 className="font-bold text-white text-xl leading-tight">
-                {loan.borrowAmountETH
-                  ? `${loan.borrowAmountETH.toFixed(4)} ${loan.asset}`
-                  : `${loan.borrowAmount.toLocaleString()} ${loan.asset}`}
+                ${(parseFloat(loan.borrowedUSDC) / 1e6).toFixed(2)} USDC
               </h3>
-              {loan.borrowAmountETH && (
-                <div className="text-sm text-gray-300 space-y-0.5">
-                  <p>≈ ${loan.borrowAmount.toLocaleString()} USD</p>
-                  {loan.ethPriceAtCreation && (
-                    <p className="text-xs text-gray-400">
-                      ETH @ ${loan.ethPriceAtCreation.toLocaleString()}
-                    </p>
-                  )}
-                </div>
-              )}
+              <div className="text-sm text-gray-300 space-y-0.5">
+                <p>Collateral: {(parseFloat(loan.collateralLINK) / 1e18).toFixed(4)} LINK</p>
+                <p>Leverage: {(loan.leverageRatio / 100).toFixed(1)}x</p>
+                <p className="text-xs text-gray-400">
+                  Entry Price: ${(parseFloat(loan.entryPrice) / 1e8).toFixed(2)}
+                </p>
+              </div>
               <p className="text-sm text-gray-400 font-mono">
                 Loan #{loan.id.slice(-8)}
               </p>
@@ -187,14 +176,16 @@ export const LoanCard = memo(
               <TrendingUp size={14} className="text-blue-400" />
               <p className="text-xs text-blue-200 font-medium">LTV Ratio</p>
             </div>
-            <p className="text-lg font-bold text-white">{loan.ltvRatio}%</p>
+            <p className="text-lg font-bold text-white">
+              {(((parseFloat(loan.borrowedUSDC) / 1e6) / ((parseFloat(loan.suppliedLINK) / 1e18) * (parseFloat(loan.entryPrice) / 1e8))) * 100).toFixed(1)}%
+            </p>
           </div>
           <div className="glassmorphism rounded-xl p-4 border border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10">
             <div className="flex items-center gap-2 mb-2">
               <Zap size={14} className="text-green-400" />
-              <p className="text-xs text-green-200 font-medium">APY Rate</p>
+              <p className="text-xs text-green-200 font-medium">Pre-Auth</p>
             </div>
-            <p className="text-lg font-bold text-white">{loan.interestRate}%</p>
+            <p className="text-lg font-bold text-white">${(parseFloat(loan.preAuthAmount) / 1e6).toLocaleString()}</p>
           </div>
         </div>
 
@@ -205,44 +196,27 @@ export const LoanCard = memo(
                 <div className="flex items-center gap-2 mb-3">
                   <TrendingUp size={14} className="text-amber-300" />
                   <span className="text-amber-100 text-sm font-bold">
-                    Interest Accrued
+                    Supplied LINK
                   </span>
                 </div>
-                <div className="text-xl font-bold">
-                  <BlockchainDataDisplay 
-                    value={loan.blockchainInterest || 0} 
-                    decimals={4}
-                    isUpdating={loanInfo?.isUpdating || false}
-                    lastUpdated={loanInfo?.lastUpdated}
-                    loanCreatedAt={loan.createdAt}
-                    principalAmount={loan.borrowAmount}
-                    annualRate={loan.interestRate}
-                  />
+                <div className="text-xl font-bold text-white">
+                  {(parseFloat(loan.suppliedLINK) / 1e18).toFixed(4)}
                 </div>
               </div>
               <div className="glassmorphism rounded-xl p-4 border border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-violet-500/10">
                 <div className="flex items-center gap-2 mb-3">
                   <DollarSign size={14} className="text-purple-300" />
                   <span className="text-purple-100 text-sm font-bold">
-                    Total Repayment
+                    Pre-Auth Charged
                   </span>
                 </div>
-                <div className="text-xl font-bold">
-                  <BlockchainDataDisplay 
-                    value={loan.blockchainRepayAmount || loan.borrowAmount} 
-                    decimals={2}
-                    isUpdating={loanInfo?.isUpdating || false}
-                    lastUpdated={loanInfo?.lastUpdated}
-                    loanCreatedAt={loan.createdAt}
-                    principalAmount={loan.borrowAmount}
-                    annualRate={loan.interestRate}
-                    isRepaymentTotal={true}
-                  />
+                <div className="text-xl font-bold text-white">
+                  {loan.preAuthCharged ? "Yes" : "No"}
                 </div>
               </div>
             </div>
 
-            {loan.preAuthExpiresAt && (
+            {loan.preAuthExpiryTime && (
               <div className="glassmorphism rounded-xl p-4 border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 mb-4">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-3">
@@ -266,7 +240,7 @@ export const LoanCard = memo(
                         Pre-Auth Amount
                       </p>
                       <p className="font-bold text-white text-lg">
-                        ${loan.preAuthAmount?.toLocaleString() || 'N/A'}
+                        ${loan.preAuthAmount ? (parseFloat(loan.preAuthAmount.toString()) / 1e6).toFixed(2) : 'N/A'}
                       </p>
                     </div>
                   </div>
@@ -302,30 +276,30 @@ export const LoanCard = memo(
               <div>
                 <p className="text-gray-400 mb-1">Pre-Auth ID</p>
                 <p className="text-white font-mono break-all">
-                  {loan.preAuthId.slice(0, 20)}...
+                  {loan.stripePaymentIntentId.slice(0, 20)}...
                 </p>
               </div>
-              {loan.preAuthCreatedAt && (
+              {loan.createdAt && (
                 <div>
                   <p className="text-gray-400 mb-1">Pre-Auth Created</p>
                   <p className="text-white font-mono">
-                    {formatDate(loan.preAuthCreatedAt)}
+                    {formatDate(loan.createdAt)}
                   </p>
                 </div>
               )}
-              {loan.preAuthExpiresAt && (
+              {loan.preAuthExpiryTime && (
                 <div>
                   <p className="text-gray-400 mb-1">Pre-Auth Expires</p>
                   <p className="text-white font-mono">
-                    {formatDate(loan.preAuthExpiresAt)}
+                    {formatDate(new Date(loan.preAuthExpiryTime * 1000).toISOString())}
                   </p>
                 </div>
               )}
-              {loan.repaidAt && (
+              {loan.status === "repaid" && (
                 <div>
                   <p className="text-gray-400 mb-1">Repaid</p>
                   <p className="text-white font-mono">
-                    {formatDate(loan.repaidAt)}
+                    Position Closed
                   </p>
                 </div>
               )}
@@ -365,11 +339,9 @@ export const LoanCard = memo(
     return (
       prevProps.loan.id === nextProps.loan.id &&
       prevProps.loan.status === nextProps.loan.status &&
-      prevProps.loan.blockchainInterest === nextProps.loan.blockchainInterest &&
-      prevProps.loan.blockchainRepayAmount === nextProps.loan.blockchainRepayAmount &&
-      prevProps.isProcessing === nextProps.isProcessing &&
-      prevProps.loanInfo?.lastUpdated === nextProps.loanInfo?.lastUpdated &&
-      prevProps.loanInfo?.isUpdating === nextProps.loanInfo?.isUpdating
+      prevProps.loan.isActive === nextProps.loan.isActive &&
+      prevProps.loan.preAuthCharged === nextProps.loan.preAuthCharged &&
+      prevProps.isProcessing === nextProps.isProcessing
     );
   }
 );
