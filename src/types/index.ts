@@ -21,41 +21,45 @@ export interface BorrowingData {
   interest_rate: number;
   wallet_address: string;
 }
-export interface Loan {
-  id: string;
-  preAuthId: string;
+export interface Position {
+  collateralLINK: string; // User's initial LINK (18 decimals)
+  leverageRatio: number; // 2x, 3x, etc (scaled by 100)
+  borrowedUSDC: string; // Aave debt (6 decimals)
+  suppliedLINK: string; // Total LINK in Aave (18 decimals)
+  entryPrice: string; // LINK price at entry (8 decimals)
+  preAuthAmount: string; // Card hold amount (6 decimals)
+  openTimestamp: number;
+  preAuthExpiryTime: number; // When to charge pre-auth (PAYMENT ONLY - does NOT affect position)
+  isActive: boolean; // Position can be traded/closed regardless of preAuth status
+  preAuthCharged: boolean; // Track if pre-auth was charged (PAYMENT ONLY - does NOT affect position)
+  stripePaymentIntentId: string;
+  stripeCustomerId: string;
+  stripePaymentMethodId: string;
+}
+
+export interface Loan extends Position {
+  // This interface extends Position for UI-specific data if needed,
+  // adding fields that are not directly from the smart contract struct
+  id: string; // A unique ID for the loan, perhaps derived from tx hash or a counter
   walletAddress: string;
-  customerId: string;
-  paymentMethodId: string;
+  asset: string; // e.g., "LINK" or "USDC"
+  status: "active" | "repaid" | "defaulted"; // UI-specific status
+  createdAt: string; // UI-specific creation timestamp
+  txHash?: string; // Transaction hash for opening the loan
+  // Any other UI-specific fields can be added here
+}
 
-  // Loan details
-  borrowAmount: number;
-  borrowAmountETH?: number; // New field for ETH amount
-  ethPriceAtCreation?: number; // ETH price when loan was created
-  asset: string;
-  interestRate: number;
-  ltvRatio: number;
-
-  // Credit tracking
-  originalCreditLimit: number;
-  preAuthAmount: number;
-
-  // Status tracking
-  status: "active" | "repaid" | "defaulted";
-
-  // Timestamps
-  createdAt: string;
-  preAuthCreatedAt?: string;
-  preAuthExpiresAt?: string;
-  repaidAt?: string;
-
-
-  // Transaction data
-  txHash?: string;
-
-  // Blockchain data
-  blockchainInterest?: number;
-  blockchainRepayAmount?: number;
+export interface PositionStats {
+  collateralUSD: number;
+  currentCollateralUSD: number;
+  totalExposureLINK: number;
+  totalExposureUSD: number;
+  unrealizedPnL: number;
+  unrealizedPnLPercent: number;
+  liquidationPrice: number;
+  healthFactor: number;
+  timeRemaining: number;
+  isAtRisk: boolean;
 }
 
 export interface CreditSummary {
