@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { sepolia } from "viem/chains";
 import { avalancheFuji } from "@/config/web3";
+import { getGasSettings, formatGasSettings, retryWithIncreasedGas, isGasError } from "./gasUtils";
 
 // CreditShaftCore ABI for USDC liquidity operations
 export const CREDITSHAFT_CORE_ABI = [
@@ -291,26 +292,77 @@ export const openLeveragePosition = async (params: {
     // Only approve if current allowance is insufficient
     if (currentAllowance.lt(collateralLINKWei)) {
       console.log(
-        `Insufficient allowance. Approving ${params.collateralLINK} LINK for CreditShaftLeverage contract...`
+        `Insufficient allowance. Approving unlimited LINK for CreditShaftLeverage contract...`
       );
+      
+      // Get dynamic gas settings for approval (unlimited amount)
+      const chainId = (await contract.provider.getNetwork()).chainId;
+      const approvalGasSettings = await getGasSettings(
+        contract.provider,
+        chainId,
+        'approval',
+        linkContract,
+        [contract.address, ethers.constants.MaxUint256]
+      );
+      
+      console.log('Using gas settings for LINK approval:', formatGasSettings(approvalGasSettings));
+      
       const approveTx = await linkContract.approve(
         contract.address,
-        collateralLINKWei
+        ethers.constants.MaxUint256, // Unlimited approval
+        approvalGasSettings
       );
       await approveTx.wait();
-      console.log("LINK approval successful:", approveTx.hash);
+      console.log("LINK unlimited approval successful:", approveTx.hash);
     } else {
       console.log("Sufficient allowance already exists. Skipping approval.");
     }
 
-    const tx = await contract.openLeveragePosition(
-      params.leverageRatio,
-      collateralLINKWei,
-      expiryTimeSeconds,
-      params.stripePaymentIntentId,
-      params.stripeCustomerId,
-      params.stripePaymentMethodId
+    // Get dynamic gas settings for position opening
+    const chainId = (await contract.provider.getNetwork()).chainId;
+    const positionGasSettings = await getGasSettings(
+      contract.provider,
+      chainId,
+      'openLeveragePosition',
+      contract,
+      [
+        params.leverageRatio,
+        collateralLINKWei,
+        expiryTimeSeconds,
+        params.stripePaymentIntentId,
+        params.stripeCustomerId,
+        params.stripePaymentMethodId
+      ]
     );
+    
+    console.log('Using gas settings for openLeveragePosition:', formatGasSettings(positionGasSettings));
+    
+    let tx;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        const gasSettingsToUse = attempts === 0 ? positionGasSettings : await retryWithIncreasedGas(positionGasSettings, attempts);
+        
+        tx = await contract.openLeveragePosition(
+          params.leverageRatio,
+          collateralLINKWei,
+          expiryTimeSeconds,
+          params.stripePaymentIntentId,
+          params.stripeCustomerId,
+          params.stripePaymentMethodId,
+          gasSettingsToUse
+        );
+        break; // Success, exit retry loop
+      } catch (error) {
+        attempts++;
+        if (attempts >= maxAttempts || !isGasError(error)) {
+          throw error; // Re-throw if max attempts reached or not a gas error
+        }
+        console.warn(`Gas error on attempt ${attempts}, retrying with increased gas:`, error);
+      }
+    }
 
     // Log transaction object
     console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
@@ -373,7 +425,36 @@ export const closeLeveragePosition = async () => {
       timestamp: new Date().toISOString(),
     });
 
-    const tx = await contract.closeLeveragePosition();
+    // Get dynamic gas settings for position closing
+    const chainId = (await contract.provider.getNetwork()).chainId;
+    const closeGasSettings = await getGasSettings(
+      contract.provider,
+      chainId,
+      'closeLeveragePosition',
+      contract,
+      []
+    );
+    
+    console.log('Using gas settings for closeLeveragePosition:', formatGasSettings(closeGasSettings));
+    
+    let tx;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        const gasSettingsToUse = attempts === 0 ? closeGasSettings : await retryWithIncreasedGas(closeGasSettings, attempts);
+        
+        tx = await contract.closeLeveragePosition(gasSettingsToUse);
+        break; // Success, exit retry loop
+      } catch (error) {
+        attempts++;
+        if (attempts >= maxAttempts || !isGasError(error)) {
+          throw error; // Re-throw if max attempts reached or not a gas error
+        }
+        console.warn(`Gas error on attempt ${attempts}, retrying with increased gas:`, error);
+      }
+    }
 
     console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
       hash: tx.hash,
@@ -510,9 +591,40 @@ export const addLiquidity = async (ethAmount: string) => {
       timestamp: new Date().toISOString(),
     });
 
-    const tx = await contract.addLiquidity({
-      value: valueWei,
-    });
+    // Get dynamic gas settings for addLiquidity
+    const chainId = (await contract.provider.getNetwork()).chainId;
+    const gasSettings = await getGasSettings(
+      contract.provider,
+      chainId,
+      'addLiquidity',
+      contract,
+      [],
+      { value: valueWei }
+    );
+    
+    console.log('Using gas settings for addLiquidity:', formatGasSettings(gasSettings));
+    
+    let tx;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        const gasSettingsToUse = attempts === 0 ? gasSettings : await retryWithIncreasedGas(gasSettings, attempts);
+        
+        tx = await contract.addLiquidity({
+          value: valueWei,
+          ...gasSettingsToUse
+        });
+        break; // Success, exit retry loop
+      } catch (error) {
+        attempts++;
+        if (attempts >= maxAttempts || !isGasError(error)) {
+          throw error; // Re-throw if max attempts reached or not a gas error
+        }
+        console.warn(`Gas error on attempt ${attempts}, retrying with increased gas:`, error);
+      }
+    }
 
     // Log transaction object
     console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
@@ -565,7 +677,36 @@ export const removeLiquidity = async (shares: string) => {
       timestamp: new Date().toISOString(),
     });
 
-    const tx = await contract.removeLiquidity(sharesWei);
+    // Get dynamic gas settings for removeLiquidity
+    const chainId = (await contract.provider.getNetwork()).chainId;
+    const gasSettings = await getGasSettings(
+      contract.provider,
+      chainId,
+      'removeLiquidity',
+      contract,
+      [sharesWei]
+    );
+    
+    console.log('Using gas settings for removeLiquidity:', formatGasSettings(gasSettings));
+    
+    let tx;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        const gasSettingsToUse = attempts === 0 ? gasSettings : await retryWithIncreasedGas(gasSettings, attempts);
+        
+        tx = await contract.removeLiquidity(sharesWei, gasSettingsToUse);
+        break; // Success, exit retry loop
+      } catch (error) {
+        attempts++;
+        if (attempts >= maxAttempts || !isGasError(error)) {
+          throw error; // Re-throw if max attempts reached or not a gas error
+        }
+        console.warn(`Gas error on attempt ${attempts}, retrying with increased gas:`, error);
+      }
+    }
 
     // Log transaction object
     console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
@@ -672,20 +813,78 @@ export const addUSDCLiquidity = async (usdcAmount: string) => {
     // Approve USDC if needed
     if (currentAllowance.lt(usdcAmountWei)) {
       console.log(
-        `Insufficient allowance. Approving ${usdcAmount} USDC for CreditShaftCore contract...`
+        `Insufficient allowance. Approving unlimited USDC for CreditShaftCore contract...`
       );
-      const approveTx = await usdcContract.approve(
-        coreContract.address,
-        usdcAmountWei
+      // Get dynamic gas settings for USDC approval (unlimited amount)
+      const chainId = (await coreContract.provider.getNetwork()).chainId;
+      const approvalGasSettings = await getGasSettings(
+        coreContract.provider,
+        chainId,
+        'approval',
+        usdcContract,
+        [coreContract.address, ethers.constants.MaxUint256]
       );
+      
+      console.log('Using gas settings for USDC approval:', formatGasSettings(approvalGasSettings));
+      
+      let approveTx;
+      let approvalAttempts = 0;
+      const maxAttempts = 3;
+      
+      while (approvalAttempts < maxAttempts) {
+        try {
+          const gasSettingsToUse = approvalAttempts === 0 ? approvalGasSettings : await retryWithIncreasedGas(approvalGasSettings, approvalAttempts);
+          
+          approveTx = await usdcContract.approve(
+            coreContract.address,
+            ethers.constants.MaxUint256, // Unlimited approval
+            gasSettingsToUse
+          );
+          break; // Success, exit retry loop
+        } catch (error) {
+          approvalAttempts++;
+          if (approvalAttempts >= maxAttempts || !isGasError(error)) {
+            throw error; // Re-throw if max attempts reached or not a gas error
+          }
+          console.warn(`Gas error on approval attempt ${approvalAttempts}, retrying with increased gas:`, error);
+        }
+      }
       await approveTx.wait();
-      console.log("USDC approval successful:", approveTx.hash);
+      console.log("USDC unlimited approval successful:", approveTx.hash);
     } else {
       console.log("Sufficient allowance already exists. Skipping approval.");
     }
 
-    // Add liquidity
-    const tx = await coreContract.addUSDCLiquidity(usdcAmountWei);
+    // Get dynamic gas settings for addUSDCLiquidity
+    const chainId = (await coreContract.provider.getNetwork()).chainId;
+    const liquidityGasSettings = await getGasSettings(
+      coreContract.provider,
+      chainId,
+      'addUSDCLiquidity',
+      coreContract,
+      [usdcAmountWei]
+    );
+    
+    console.log('Using gas settings for addUSDCLiquidity:', formatGasSettings(liquidityGasSettings));
+    
+    let tx;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        const gasSettingsToUse = attempts === 0 ? liquidityGasSettings : await retryWithIncreasedGas(liquidityGasSettings, attempts);
+        
+        tx = await coreContract.addUSDCLiquidity(usdcAmountWei, gasSettingsToUse);
+        break; // Success, exit retry loop
+      } catch (error) {
+        attempts++;
+        if (attempts >= maxAttempts || !isGasError(error)) {
+          throw error; // Re-throw if max attempts reached or not a gas error
+        }
+        console.warn(`Gas error on attempt ${attempts}, retrying with increased gas:`, error);
+      }
+    }
 
     // Log transaction object
     console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
@@ -740,7 +939,36 @@ export const removeUSDCLiquidity = async (lpTokenAmount: string) => {
       timestamp: new Date().toISOString(),
     });
 
-    const tx = await coreContract.removeUSDCLiquidity(lpTokenAmountWei);
+    // Get dynamic gas settings for removeUSDCLiquidity
+    const chainId = (await coreContract.provider.getNetwork()).chainId;
+    const gasSettings = await getGasSettings(
+      coreContract.provider,
+      chainId,
+      'removeUSDCLiquidity',
+      coreContract,
+      [lpTokenAmountWei]
+    );
+    
+    console.log('Using gas settings for removeUSDCLiquidity:', formatGasSettings(gasSettings));
+    
+    let tx;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        const gasSettingsToUse = attempts === 0 ? gasSettings : await retryWithIncreasedGas(gasSettings, attempts);
+        
+        tx = await coreContract.removeUSDCLiquidity(lpTokenAmountWei, gasSettingsToUse);
+        break; // Success, exit retry loop
+      } catch (error) {
+        attempts++;
+        if (attempts >= maxAttempts || !isGasError(error)) {
+          throw error; // Re-throw if max attempts reached or not a gas error
+        }
+        console.warn(`Gas error on attempt ${attempts}, retrying with increased gas:`, error);
+      }
+    }
 
     // Log transaction object
     console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
@@ -918,11 +1146,41 @@ export const mintUSDC = async (toAddress: string) => {
       timestamp: new Date().toISOString(),
     });
 
-    const tx = await faucetContract.mint(
-      USDC_ADDRESSES[sepolia.id],
-      toAddress,
-      amount
+    // Get dynamic gas settings for mintUSDC
+    const chainId = (await faucetContract.provider.getNetwork()).chainId;
+    const gasSettings = await getGasSettings(
+      faucetContract.provider,
+      chainId,
+      'mint',
+      faucetContract,
+      [USDC_ADDRESSES[sepolia.id], toAddress, amount]
     );
+    
+    console.log('Using gas settings for mintUSDC:', formatGasSettings(gasSettings));
+    
+    let tx;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        const gasSettingsToUse = attempts === 0 ? gasSettings : await retryWithIncreasedGas(gasSettings, attempts);
+        
+        tx = await faucetContract.mint(
+          USDC_ADDRESSES[sepolia.id],
+          toAddress,
+          amount,
+          gasSettingsToUse
+        );
+        break; // Success, exit retry loop
+      } catch (error) {
+        attempts++;
+        if (attempts >= maxAttempts || !isGasError(error)) {
+          throw error; // Re-throw if max attempts reached or not a gas error
+        }
+        console.warn(`Gas error on attempt ${attempts}, retrying with increased gas:`, error);
+      }
+    }
 
     const receipt = await tx.wait();
 
@@ -960,11 +1218,41 @@ export const mintLINK = async (toAddress: string) => {
       timestamp: new Date().toISOString(),
     });
 
-    const tx = await faucetContract.mint(
-      LINK_TOKEN_ADDRESS,
-      toAddress,
-      amount
+    // Get dynamic gas settings for mintLINK
+    const chainId = (await faucetContract.provider.getNetwork()).chainId;
+    const gasSettings = await getGasSettings(
+      faucetContract.provider,
+      chainId,
+      'mint',
+      faucetContract,
+      [LINK_TOKEN_ADDRESS, toAddress, amount]
     );
+    
+    console.log('Using gas settings for mintLINK:', formatGasSettings(gasSettings));
+    
+    let tx;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        const gasSettingsToUse = attempts === 0 ? gasSettings : await retryWithIncreasedGas(gasSettings, attempts);
+        
+        tx = await faucetContract.mint(
+          LINK_TOKEN_ADDRESS,
+          toAddress,
+          amount,
+          gasSettingsToUse
+        );
+        break; // Success, exit retry loop
+      } catch (error) {
+        attempts++;
+        if (attempts >= maxAttempts || !isGasError(error)) {
+          throw error; // Re-throw if max attempts reached or not a gas error
+        }
+        console.warn(`Gas error on attempt ${attempts}, retrying with increased gas:`, error);
+      }
+    }
 
     const receipt = await tx.wait();
 
@@ -1006,7 +1294,36 @@ export const borrowMoreUSDC = async (additionalAmount: string) => {
       timestamp: new Date().toISOString(),
     });
 
-    const tx = await contract.borrowMoreUSDC(additionalAmountWei);
+    // Get dynamic gas settings for borrowMoreUSDC
+    const chainId = (await contract.provider.getNetwork()).chainId;
+    const gasSettings = await getGasSettings(
+      contract.provider,
+      chainId,
+      'borrowMoreUSDC',
+      contract,
+      [additionalAmountWei]
+    );
+    
+    console.log('Using gas settings for borrowMoreUSDC:', formatGasSettings(gasSettings));
+    
+    let tx;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        const gasSettingsToUse = attempts === 0 ? gasSettings : await retryWithIncreasedGas(gasSettings, attempts);
+        
+        tx = await contract.borrowMoreUSDC(additionalAmountWei, gasSettingsToUse);
+        break; // Success, exit retry loop
+      } catch (error) {
+        attempts++;
+        if (attempts >= maxAttempts || !isGasError(error)) {
+          throw error; // Re-throw if max attempts reached or not a gas error
+        }
+        console.warn(`Gas error on attempt ${attempts}, retrying with increased gas:`, error);
+      }
+    }
 
     console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
       hash: tx.hash,

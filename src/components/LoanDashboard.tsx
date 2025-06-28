@@ -1,13 +1,7 @@
 // src/components/LoanDashboard.tsx
 "use client";
 
-import {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-  useRef,
-} from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   DollarSign,
   Loader,
@@ -34,8 +28,16 @@ interface LoanDashboardProps {
 
 // Main dashboard component
 export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
-  const { positionInfo, loading: contractLoading, refetch, isRealTimeActive } = useLoanStatus();
-  const { closeLeveragePosition: contractCloseLeveragePosition, borrowMoreUSDC: contractBorrowMoreUSDC } = useContractOperations();
+  const {
+    positionInfo,
+    loading: contractLoading,
+    refetch,
+    isRealTimeActive,
+  } = useLoanStatus();
+  const {
+    closeLeveragePosition: contractCloseLeveragePosition,
+    borrowMoreUSDC: contractBorrowMoreUSDC,
+  } = useContractOperations();
   const [isProcessingPosition, setIsProcessingPosition] = useState(false);
   const [isMakingUnsafe, setIsMakingUnsafe] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
@@ -71,36 +73,47 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
     if (!positionInfo?.position || currentLinkPrice === 0) return null;
 
     const position = positionInfo.position;
-    
+
     // Parse contract values
     const collateralLINK = parseFloat(position.collateralLINK) / 1e18;
     const suppliedLINK = parseFloat(position.suppliedLINK) / 1e18;
     const borrowedUSDC = parseFloat(position.borrowedUSDC) / 1e6;
     const entryPrice = parseFloat(position.entryPrice) / 1e8;
     const preAuthAmount = parseFloat(position.preAuthAmount) / 1e6;
-    
+
     // Calculate current values
     const currentCollateralValue = collateralLINK * currentLinkPrice;
     const currentSuppliedValue = suppliedLINK * currentLinkPrice;
     const entryCollateralValue = collateralLINK * entryPrice;
-    
+
     // Calculate P&L (correct for leverage positions)
     const entrySuppliedValue = suppliedLINK * entryPrice;
     const unrealizedPnL = currentSuppliedValue - entrySuppliedValue;
-    const unrealizedPnLPercent = entryCollateralValue > 0 ? (unrealizedPnL / entryCollateralValue) * 100 : 0;
-    
+    const unrealizedPnLPercent =
+      entryCollateralValue > 0
+        ? (unrealizedPnL / entryCollateralValue) * 100
+        : 0;
+
     // Calculate liquidation price (borrowedUSDC / (suppliedLINK * 0.85))
-    const liquidationPrice = suppliedLINK > 0 ? borrowedUSDC / (suppliedLINK * 0.85) : 0;
-    
+    const liquidationPrice =
+      suppliedLINK > 0 ? borrowedUSDC / (suppliedLINK * 0.85) : 0;
+
     // Calculate health factor (correct for supplied position)
-    const healthFactor = borrowedUSDC > 0 ? (currentSuppliedValue * 0.85) / borrowedUSDC : 0;
-    
+    const healthFactor =
+      borrowedUSDC > 0 ? (currentSuppliedValue * 0.85) / borrowedUSDC : 0;
+
     // Calculate time remaining until pre-auth expiry
-    const timeRemaining = Math.max(0, position.preAuthExpiryTime - Math.floor(Date.now() / 1000));
-    
+    const timeRemaining = Math.max(
+      0,
+      position.preAuthExpiryTime - Math.floor(Date.now() / 1000)
+    );
+
     // Calculate current LTV (Loan-to-Value ratio)
-    const currentLTV = currentSuppliedValue > 0 ? (borrowedUSDC / currentSuppliedValue) * 100 : 0;
-    
+    const currentLTV =
+      currentSuppliedValue > 0
+        ? (borrowedUSDC / currentSuppliedValue) * 100
+        : 0;
+
     return {
       collateralLINK,
       suppliedLINK,
@@ -119,7 +132,10 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
       leverageRatio: position.leverageRatio / 100,
       currentLTV,
       isAtRisk: healthFactor < 1.2, // Risk if health factor below 1.2
-      priceChange: entryPrice > 0 ? ((currentLinkPrice - entryPrice) / entryPrice) * 100 : 0,
+      priceChange:
+        entryPrice > 0
+          ? ((currentLinkPrice - entryPrice) / entryPrice) * 100
+          : 0,
     };
   }, [positionInfo?.position, currentLinkPrice]);
 
@@ -135,7 +151,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
     if (!positionInfo?.hasActivePosition || timeRemaining <= 0) return;
 
     const timer = setInterval(() => {
-      setTimeRemaining(prev => {
+      setTimeRemaining((prev) => {
         const newTime = prev - 1;
         return newTime > 0 ? newTime : 0;
       });
@@ -144,18 +160,17 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
     return () => clearInterval(timer);
   }, [positionInfo?.hasActivePosition, timeRemaining]);
 
-
   const isLoading = contractLoading;
 
   // Debounced refresh function to prevent repeated calls
   const debouncedRefetch = useCallback(() => {
     // Don't refresh if position is already closed
     if (!positionInfo?.hasActivePosition || isRefreshing) return;
-    
+
     if (refreshTimeoutRef.current) {
       clearTimeout(refreshTimeoutRef.current);
     }
-    
+
     setIsRefreshing(true);
     refreshTimeoutRef.current = setTimeout(async () => {
       try {
@@ -176,94 +191,83 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
     };
   }, []);
 
-  const handleClosePosition = useCallback(
-    async () => {
-      addToast(
-        "info",
-        "Processing...",
-        "Closing position on blockchain."
-      );
+  const handleClosePosition = useCallback(async () => {
+    addToast("info", "Processing...", "Closing position on blockchain.");
 
-      setIsProcessingPosition(true);
-      try {
-        const receipt = await contractCloseLeveragePosition();
-
-        addToast(
-          "success",
-          "Position Closed Successfully!",
-          `Transaction: ${receipt.transactionHash.substring(
-            0,
-            10
-          )}...`
-        );
-
-        // Refresh blockchain data and clear any intervals
-        await refetch();
-      } catch (error) {
-        addToast(
-          "error",
-          "Position Closure Failed",
-          (error as Error).message ||
-            "Failed to close the position. Please try again."
-        );
-      } finally {
-        setIsProcessingPosition(false);
-      }
-    },
-    [addToast, contractCloseLeveragePosition, refetch]
-  );
-
-  const handleMakeUnsafe = useCallback(
-    async () => {
-      if (!positionMetrics) return;
-
-      // Calculate additional USDC needed to reach 67% LTV (above 65% threshold)
-      const targetLTV = 67; // 67% - above the 65% automation threshold
-      const currentSuppliedValue = positionMetrics.currentSuppliedValue;
-      const currentBorrowedUSDC = positionMetrics.borrowedUSDC;
-      const targetDebt = (currentSuppliedValue * targetLTV) / 100;
-      const additionalBorrow = targetDebt - currentBorrowedUSDC;
-
-      if (additionalBorrow <= 0) {
-        addToast(
-          "info",
-          "Position Already Unsafe",
-          "Position LTV is already above the safety threshold."
-        );
-        return;
-      }
-
+    setIsProcessingPosition(true);
+    try {
+      const receipt = await contractCloseLeveragePosition();
 
       addToast(
-        "info",
-        "Making Position Unsafe...",
-        `Borrowing additional $${additionalBorrow.toFixed(2)} USDC`
+        "success",
+        "Position Closed Successfully!",
+        `Transaction: ${receipt.transactionHash.substring(0, 10)}...`
       );
 
-      setIsMakingUnsafe(true);
-      try {
-        const receipt = await contractBorrowMoreUSDC(additionalBorrow.toFixed(2));
+      // Refresh blockchain data and clear any intervals
+      await refetch();
+    } catch (error) {
+      addToast(
+        "error",
+        "Position Closure Failed",
+        (error as Error).message ||
+          "Failed to close the position. Please try again."
+      );
+    } finally {
+      setIsProcessingPosition(false);
+    }
+  }, [addToast, contractCloseLeveragePosition, refetch]);
 
-        addToast(
-          "success",
-          "Position Made Unsafe!",
-          `Additional USDC borrowed. Transaction: ${receipt.transactionHash.substring(0, 10)}...`
-        );
+  const handleMakeUnsafe = useCallback(async () => {
+    if (!positionMetrics) return;
 
-        // Refresh blockchain data
-        await refetch();
-      } catch (error) {
-        addToast(
-          "error",
-          "Failed to Make Unsafe",
-          (error as Error).message || "Failed to borrow additional USDC."
-        );
-      } finally {
-        setIsMakingUnsafe(false);
-      }
-    },
-    [positionMetrics, addToast, contractBorrowMoreUSDC, refetch]
-  );
+    // Calculate additional USDC needed to reach 67% LTV (above 65% threshold)
+    const targetLTV = 67; // 67% - above the 65% automation threshold
+    const currentSuppliedValue = positionMetrics.currentSuppliedValue;
+    const currentBorrowedUSDC = positionMetrics.borrowedUSDC;
+    const targetDebt = (currentSuppliedValue * targetLTV) / 100;
+    const additionalBorrow = targetDebt - currentBorrowedUSDC;
+
+    if (additionalBorrow <= 0) {
+      addToast(
+        "info",
+        "Position Already Unsafe",
+        "Position LTV is already above the safety threshold."
+      );
+      return;
+    }
+
+    addToast(
+      "info",
+      "Making Position Unsafe...",
+      `Borrowing additional $${additionalBorrow.toFixed(2)} USDC`
+    );
+
+    setIsMakingUnsafe(true);
+    try {
+      const receipt = await contractBorrowMoreUSDC(additionalBorrow.toFixed(2));
+
+      addToast(
+        "success",
+        "Position Made Unsafe!",
+        `Additional USDC borrowed. Transaction: ${receipt.transactionHash.substring(
+          0,
+          10
+        )}...`
+      );
+
+      // Refresh blockchain data
+      await refetch();
+    } catch (error) {
+      addToast(
+        "error",
+        "Failed to Make Unsafe",
+        (error as Error).message || "Failed to borrow additional USDC."
+      );
+    } finally {
+      setIsMakingUnsafe(false);
+    }
+  }, [positionMetrics, addToast, contractBorrowMoreUSDC, refetch]);
 
   useEffect(() => {
     if (walletAddress) {
@@ -307,7 +311,9 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
             {isRealTimeActive && (
               <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/20 border border-green-500/30">
                 <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span className="text-green-300 text-sm font-medium">Live Updates</span>
+                <span className="text-green-300 text-sm font-medium">
+                  Live Updates
+                </span>
               </div>
             )}
           </div>
@@ -322,7 +328,8 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
               No Active Position
             </h3>
             <p className="text-gray-400 text-lg max-w-md mx-auto leading-relaxed">
-              You haven&apos;t opened a leveraged position yet. Open one to see it here.
+              You haven&apos;t opened a leveraged position yet. Open one to see
+              it here.
             </p>
           </div>
         ) : (
@@ -331,20 +338,28 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-2 h-8 bg-gradient-to-b from-emerald-500 to-green-600 rounded-full"></div>
-                <h3 className="text-xl font-bold text-white">Your Active Position</h3>
+                <h3 className="text-xl font-bold text-white">
+                  Your Active Position
+                </h3>
                 <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 rounded-full text-sm font-medium border border-emerald-500/30">
                   Active
                 </span>
               </div>
               {positionMetrics && (
                 <div className="flex items-center gap-2">
-                  <div className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${
-                    positionMetrics.isAtRisk 
-                      ? 'bg-red-500/20 text-red-300 border border-red-500/30' 
-                      : 'bg-green-500/20 text-green-300 border border-green-500/30'
-                  }`}>
-                    {positionMetrics.isAtRisk ? <AlertTriangle size={14} /> : <Shield size={14} />}
-                    {positionMetrics.isAtRisk ? 'At Risk' : 'Healthy'}
+                  <div
+                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${
+                      positionMetrics.isAtRisk
+                        ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                        : "bg-green-500/20 text-green-300 border border-green-500/30"
+                    }`}
+                  >
+                    {positionMetrics.isAtRisk ? (
+                      <AlertTriangle size={14} />
+                    ) : (
+                      <Shield size={14} />
+                    )}
+                    {positionMetrics.isAtRisk ? "At Risk" : "Healthy"}
                   </div>
                 </div>
               )}
@@ -357,73 +372,131 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                 <div className="glassmorphism rounded-xl p-4 border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-cyan-500/10">
                   <div className="flex items-center gap-2 mb-2">
                     <TrendingUp size={16} className="text-blue-400" />
-                    <span className="text-blue-200 text-sm font-medium">Current LINK Price</span>
+                    <span className="text-blue-200 text-sm font-medium">
+                      Current LINK Price
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-2xl font-bold text-white">
                       ${positionMetrics.currentPrice.toFixed(2)}
                     </span>
-                    {priceLoading && <Loader className="animate-spin text-blue-400" size={16} />}
+                    {priceLoading && (
+                      <Loader
+                        className="animate-spin text-blue-400"
+                        size={16}
+                      />
+                    )}
                   </div>
-                  <div className={`text-sm flex items-center gap-1 ${
-                    positionMetrics.priceChange >= 0 ? 'text-green-400' : 'text-red-400'
-                  }`}>
-                    {positionMetrics.priceChange >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                    {positionMetrics.priceChange >= 0 ? '+' : ''}{positionMetrics.priceChange.toFixed(2)}%
+                  <div
+                    className={`text-sm flex items-center gap-1 ${
+                      positionMetrics.priceChange >= 0
+                        ? "text-green-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {positionMetrics.priceChange >= 0 ? (
+                      <TrendingUp size={12} />
+                    ) : (
+                      <TrendingDown size={12} />
+                    )}
+                    {positionMetrics.priceChange >= 0 ? "+" : ""}
+                    {positionMetrics.priceChange.toFixed(2)}%
                   </div>
                 </div>
 
                 {/* P&L Card */}
-                <div className={`glassmorphism rounded-xl p-4 border ${
-                  positionMetrics.unrealizedPnL >= 0 
-                    ? 'border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10'
-                    : 'border-red-500/20 bg-gradient-to-br from-red-500/10 to-pink-500/10'
-                }`}>
+                <div
+                  className={`glassmorphism rounded-xl p-4 border ${
+                    positionMetrics.unrealizedPnL >= 0
+                      ? "border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10"
+                      : "border-red-500/20 bg-gradient-to-br from-red-500/10 to-pink-500/10"
+                  }`}
+                >
                   <div className="flex items-center gap-2 mb-2">
-                    <BarChart3 size={16} className={positionMetrics.unrealizedPnL >= 0 ? "text-green-400" : "text-red-400"} />
-                    <span className={`text-sm font-medium ${positionMetrics.unrealizedPnL >= 0 ? "text-green-200" : "text-red-200"}`}>
+                    <BarChart3
+                      size={16}
+                      className={
+                        positionMetrics.unrealizedPnL >= 0
+                          ? "text-green-400"
+                          : "text-red-400"
+                      }
+                    />
+                    <span
+                      className={`text-sm font-medium ${
+                        positionMetrics.unrealizedPnL >= 0
+                          ? "text-green-200"
+                          : "text-red-200"
+                      }`}
+                    >
                       Unrealized P&L
                     </span>
                   </div>
                   <div className="text-2xl font-bold text-white">
-                    {positionMetrics.unrealizedPnL >= 0 ? '+' : ''}${positionMetrics.unrealizedPnL.toFixed(2)}
+                    {positionMetrics.unrealizedPnL >= 0 ? "+" : ""}$
+                    {positionMetrics.unrealizedPnL.toFixed(2)}
                   </div>
-                  <div className={`text-sm ${positionMetrics.unrealizedPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {positionMetrics.unrealizedPnLPercent >= 0 ? '+' : ''}{positionMetrics.unrealizedPnLPercent.toFixed(2)}%
+                  <div
+                    className={`text-sm ${
+                      positionMetrics.unrealizedPnL >= 0
+                        ? "text-green-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {positionMetrics.unrealizedPnLPercent >= 0 ? "+" : ""}
+                    {positionMetrics.unrealizedPnLPercent.toFixed(2)}%
                   </div>
                 </div>
 
                 {/* Health Factor Card */}
-                <div className={`glassmorphism rounded-xl p-4 border ${
-                  positionMetrics.healthFactor >= 1.5 
-                    ? 'border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10'
-                    : positionMetrics.healthFactor >= 1.2
-                    ? 'border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-orange-500/10'
-                    : 'border-red-500/20 bg-gradient-to-br from-red-500/10 to-pink-500/10'
-                }`}>
+                <div
+                  className={`glassmorphism rounded-xl p-4 border ${
+                    positionMetrics.healthFactor >= 1.5
+                      ? "border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10"
+                      : positionMetrics.healthFactor >= 1.2
+                      ? "border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-orange-500/10"
+                      : "border-red-500/20 bg-gradient-to-br from-red-500/10 to-pink-500/10"
+                  }`}
+                >
                   <div className="flex items-center gap-2 mb-2">
-                    <Shield size={16} className={
-                      positionMetrics.healthFactor >= 1.5 ? "text-green-400" 
-                      : positionMetrics.healthFactor >= 1.2 ? "text-yellow-400" 
-                      : "text-red-400"
-                    } />
-                    <span className={`text-sm font-medium ${
-                      positionMetrics.healthFactor >= 1.5 ? "text-green-200" 
-                      : positionMetrics.healthFactor >= 1.2 ? "text-yellow-200" 
-                      : "text-red-200"
-                    }`}>Health Factor</span>
+                    <Shield
+                      size={16}
+                      className={
+                        positionMetrics.healthFactor >= 1.5
+                          ? "text-green-400"
+                          : positionMetrics.healthFactor >= 1.2
+                          ? "text-yellow-400"
+                          : "text-red-400"
+                      }
+                    />
+                    <span
+                      className={`text-sm font-medium ${
+                        positionMetrics.healthFactor >= 1.5
+                          ? "text-green-200"
+                          : positionMetrics.healthFactor >= 1.2
+                          ? "text-yellow-200"
+                          : "text-red-200"
+                      }`}
+                    >
+                      Health Factor
+                    </span>
                   </div>
                   <div className="text-2xl font-bold text-white">
                     {positionMetrics.healthFactor.toFixed(2)}
                   </div>
-                  <div className={`text-sm ${
-                    positionMetrics.healthFactor >= 1.5 ? 'text-green-400' 
-                    : positionMetrics.healthFactor >= 1.2 ? 'text-yellow-400' 
-                    : 'text-red-400'
-                  }`}>
-                    {positionMetrics.healthFactor >= 1.5 ? 'Safe' 
-                     : positionMetrics.healthFactor >= 1.2 ? 'Moderate' 
-                     : 'At Risk'}
+                  <div
+                    className={`text-sm ${
+                      positionMetrics.healthFactor >= 1.5
+                        ? "text-green-400"
+                        : positionMetrics.healthFactor >= 1.2
+                        ? "text-yellow-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {positionMetrics.healthFactor >= 1.5
+                      ? "Safe"
+                      : positionMetrics.healthFactor >= 1.2
+                      ? "Moderate"
+                      : "At Risk"}
                   </div>
                 </div>
 
@@ -431,44 +504,69 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                 <div className="glassmorphism rounded-xl p-4 border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-orange-500/10">
                   <div className="flex items-center gap-2 mb-2">
                     <Target size={16} className="text-amber-400" />
-                    <span className="text-amber-200 text-sm font-medium">Liquidation Price</span>
+                    <span className="text-amber-200 text-sm font-medium">
+                      Liquidation Price
+                    </span>
                   </div>
                   <div className="text-2xl font-bold text-white">
                     ${positionMetrics.liquidationPrice.toFixed(2)}
                   </div>
-                  <div className={`text-sm ${
-                    positionMetrics.currentPrice > positionMetrics.liquidationPrice * 1.2 
-                      ? 'text-green-400' : 'text-amber-400'
-                  }`}>
-                    {(((positionMetrics.currentPrice - positionMetrics.liquidationPrice) / positionMetrics.currentPrice) * 100).toFixed(1)}% buffer
+                  <div
+                    className={`text-sm ${
+                      positionMetrics.currentPrice >
+                      positionMetrics.liquidationPrice * 1.2
+                        ? "text-green-400"
+                        : "text-amber-400"
+                    }`}
+                  >
+                    {(
+                      ((positionMetrics.currentPrice -
+                        positionMetrics.liquidationPrice) /
+                        positionMetrics.currentPrice) *
+                      100
+                    ).toFixed(1)}
+                    % buffer
                   </div>
                 </div>
 
                 {/* LTV Card */}
-                <div className={`glassmorphism rounded-xl p-4 border ${
-                  positionMetrics.currentLTV <= 60 
-                    ? 'border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10'
-                    : positionMetrics.currentLTV <= 80
-                    ? 'border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-orange-500/10'
-                    : 'border-red-500/20 bg-gradient-to-br from-red-500/10 to-pink-500/10'
-                }`}>
+                <div
+                  className={`glassmorphism rounded-xl p-4 border ${
+                    positionMetrics.currentLTV <= 60
+                      ? "border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10"
+                      : positionMetrics.currentLTV <= 80
+                      ? "border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-orange-500/10"
+                      : "border-red-500/20 bg-gradient-to-br from-red-500/10 to-pink-500/10"
+                  }`}
+                >
                   <div className="flex items-center gap-2 mb-2">
-                    <BarChart3 size={16} className={
-                      positionMetrics.currentLTV <= 60 ? "text-green-400" 
-                      : positionMetrics.currentLTV <= 80 ? "text-yellow-400" 
-                      : "text-red-400"
-                    } />
-                    <span className={`text-sm font-medium ${
-                      positionMetrics.currentLTV <= 60 ? "text-green-200" 
-                      : positionMetrics.currentLTV <= 80 ? "text-yellow-200" 
-                      : "text-red-200"
-                    }`}>Current LTV</span>
+                    <BarChart3
+                      size={16}
+                      className={
+                        positionMetrics.currentLTV <= 60
+                          ? "text-green-400"
+                          : positionMetrics.currentLTV <= 80
+                          ? "text-yellow-400"
+                          : "text-red-400"
+                      }
+                    />
+                    <span
+                      className={`text-sm font-medium ${
+                        positionMetrics.currentLTV <= 60
+                          ? "text-green-200"
+                          : positionMetrics.currentLTV <= 80
+                          ? "text-yellow-200"
+                          : "text-red-200"
+                      }`}
+                    >
+                      Current LTV
+                    </span>
                   </div>
                   <div className="text-2xl font-bold text-white">
                     {positionMetrics.currentLTV.toFixed(1)}%
                   </div>
                   <div className="text-sm text-gray-400">
-                    Liquidation at 85%
+                    Liquidation above 65%
                   </div>
                 </div>
               </div>
@@ -481,28 +579,40 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                 <div className="glassmorphism rounded-xl p-6 border border-white/20">
                   <div className="flex items-center gap-2 mb-4">
                     <Zap size={20} className="text-blue-400" />
-                    <h4 className="text-lg font-bold text-white">Collateral & Leverage</h4>
+                    <h4 className="text-lg font-bold text-white">
+                      Collateral & Leverage
+                    </h4>
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-gray-300">Initial Collateral:</span>
-                      <span className="text-white font-medium">{positionMetrics.collateralLINK.toFixed(4)} LINK</span>
+                      <span className="text-white font-medium">
+                        {positionMetrics.collateralLINK.toFixed(4)} LINK
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-300">Total Supplied:</span>
-                      <span className="text-white font-medium">{positionMetrics.suppliedLINK.toFixed(4)} LINK</span>
+                      <span className="text-white font-medium">
+                        {positionMetrics.suppliedLINK.toFixed(4)} LINK
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-300">Borrowed Amount:</span>
-                      <span className="text-white font-medium">${positionMetrics.borrowedUSDC.toFixed(2)} USDC</span>
+                      <span className="text-white font-medium">
+                        ${positionMetrics.borrowedUSDC.toFixed(2)} USDC
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-300">Leverage Ratio:</span>
-                      <span className="text-blue-300 font-bold">{positionMetrics.leverageRatio.toFixed(1)}x</span>
+                      <span className="text-blue-300 font-bold">
+                        {positionMetrics.leverageRatio.toFixed(1)}x
+                      </span>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t border-white/10">
                       <span className="text-gray-300">Current Value:</span>
-                      <span className="text-green-300 font-bold">${positionMetrics.currentSuppliedValue.toFixed(2)}</span>
+                      <span className="text-green-300 font-bold">
+                        ${positionMetrics.currentSuppliedValue.toFixed(2)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -511,35 +621,56 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                 <div className="glassmorphism rounded-xl p-6 border border-white/20">
                   <div className="flex items-center gap-2 mb-4">
                     <CreditCard size={20} className="text-purple-400" />
-                    <h4 className="text-lg font-bold text-white">Payment & Timeline</h4>
+                    <h4 className="text-lg font-bold text-white">
+                      Payment & Timeline
+                    </h4>
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-gray-300">Pre-Auth Amount:</span>
-                      <span className="text-white font-medium">${positionMetrics.preAuthAmount.toFixed(2)}</span>
+                      <span className="text-white font-medium">
+                        ${positionMetrics.preAuthAmount.toFixed(2)}
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-300">Pre-Auth Status:</span>
-                      <span className={`font-medium ${
-                        positionInfo?.position?.preAuthCharged ? 'text-red-300' : 'text-green-300'
-                      }`}>
-                        {positionInfo?.position?.preAuthCharged ? 'Charged' : 'Active Hold'}
+                      <span
+                        className={`font-medium ${
+                          positionInfo?.position?.preAuthCharged
+                            ? "text-red-300"
+                            : "text-green-300"
+                        }`}
+                      >
+                        {positionInfo?.position?.preAuthCharged
+                          ? "Charged"
+                          : "Active Hold"}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-300">Entry Price:</span>
-                      <span className="text-white font-medium">${positionMetrics.entryPrice.toFixed(2)}</span>
+                      <span className="text-white font-medium">
+                        ${positionMetrics.entryPrice.toFixed(2)}
+                      </span>
                     </div>
                     {timeRemaining > 0 && (
                       <div className="flex justify-between items-center">
                         <span className="text-gray-300">Time Remaining:</span>
                         <div className="flex items-center gap-1">
                           <Clock size={14} className="text-amber-400" />
-                          <span className={`font-medium ${timeRemaining < 3600 ? 'text-amber-300' : 'text-white'}`}>
-                            {timeRemaining >= 60 ? 
-                              `${Math.floor(timeRemaining / 3600)}h ${Math.floor((timeRemaining % 3600) / 60)}m ${timeRemaining % 60}s` :
-                              `${timeRemaining}s`
-                            }
+                          <span
+                            className={`font-medium ${
+                              timeRemaining < 3600
+                                ? "text-amber-300"
+                                : "text-white"
+                            }`}
+                          >
+                            {timeRemaining >= 60
+                              ? `${Math.floor(
+                                  timeRemaining / 3600
+                                )}h ${Math.floor(
+                                  (timeRemaining % 3600) / 60
+                                )}m ${timeRemaining % 60}s`
+                              : `${timeRemaining}s`}
                           </span>
                         </div>
                       </div>
@@ -548,7 +679,19 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                       <div className="flex justify-between items-center">
                         <span className="text-gray-300">Position Age:</span>
                         <span className="text-blue-300 font-medium">
-                          {Math.floor((Date.now() / 1000 - (positionInfo?.position?.openTimestamp || 0)) / 86400)}d {Math.floor(((Date.now() / 1000 - (positionInfo?.position?.openTimestamp || 0)) % 86400) / 3600)}h
+                          {Math.floor(
+                            (Date.now() / 1000 -
+                              (positionInfo?.position?.openTimestamp || 0)) /
+                              86400
+                          )}
+                          d{" "}
+                          {Math.floor(
+                            ((Date.now() / 1000 -
+                              (positionInfo?.position?.openTimestamp || 0)) %
+                              86400) /
+                              3600
+                          )}
+                          h
                         </span>
                       </div>
                     </div>
@@ -576,13 +719,13 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                   </>
                 )}
               </button>
-              
+
               {/* Make Unsafe Button - Only show when position is safe for testing */}
               {positionMetrics && positionMetrics.currentLTV < 65 && (
                 <button
                   onClick={handleMakeUnsafe}
                   disabled={isMakingUnsafe}
-                  className="px-4 py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:from-gray-600 disabled:to-gray-700 text-white rounded-xl font-semibold transition-all transform hover:scale-105 disabled:hover:scale-100 flex items-center gap-2 shadow-lg text-sm"
+                  className="px-4 py-3 glassmorphism border border-amber-500/20 bg-gradient-to-r from-amber-500/10 to-orange-500/10 hover:border-amber-500/30 hover:bg-amber-500/20 text-white rounded-xl font-semibold transition-all transform hover:scale-105 disabled:opacity-50 flex items-center gap-2 shadow-lg text-sm"
                   title="Testing: Borrow more USDC to trigger automation"
                 >
                   {isMakingUnsafe ? (
@@ -598,7 +741,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                   )}
                 </button>
               )}
-              
+
               <button
                 onClick={debouncedRefetch}
                 disabled={isRefreshing}
