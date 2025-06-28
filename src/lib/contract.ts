@@ -27,12 +27,17 @@ export const CREDITSHAFT_ABI = [
 
 // Contract addresses - Update these with actual deployed addresses
 export const CONTRACT_ADDRESSES = {
-  [sepolia.id]: process.env.NEXT_PUBLIC_CREDIT_SHAFT_LEVERAGE || "0x348D1f1ae7268C41D4480b191f65F6D9A3085B75", // New CreditShaftLeverage address
-  [avalancheFuji.id]: process.env.NEXT_PUBLIC_CREDIT_SHAFT_LEVERAGE || "0x0000000000000000000000000000000000000000", // Default fallback
+  [sepolia.id]:
+    process.env.NEXT_PUBLIC_CREDIT_SHAFT_LEVERAGE ||
+    "0xCDeB461C501aDE6b384520D27a5A4F34C41aE512", // New CreditShaftLeverage address
+  [avalancheFuji.id]:
+    process.env.NEXT_PUBLIC_CREDIT_SHAFT_LEVERAGE ||
+    "0x0000000000000000000000000000000000000000", // Default fallback
 };
 
-export const LINK_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_LINK_TOKEN || "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5";
-
+export const LINK_TOKEN_ADDRESS =
+  process.env.NEXT_PUBLIC_LINK_TOKEN ||
+  "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5";
 
 // Simplified contract instance getter
 export const getContract = () => {
@@ -57,13 +62,13 @@ export const getPoolStats = async () => {
     // Log blockchain query input
     console.log("🔗 BLOCKCHAIN QUERY INPUT:", {
       function: "getPoolStats",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     const contract = getContract();
     const [totalLiq, totalBorr, available, utilization] =
       await contract.getPoolStats();
-    
+
     const result = {
       totalLiquidity: totalLiq,
       totalBorrowed: totalBorr,
@@ -81,7 +86,7 @@ export const getPoolStats = async () => {
       totalLiquidityETH: ethers.utils.formatEther(totalLiq),
       totalBorrowedETH: ethers.utils.formatEther(totalBorr),
       availableLiquidityETH: ethers.utils.formatEther(available),
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     return result;
@@ -89,7 +94,7 @@ export const getPoolStats = async () => {
     console.error("🔗 BLOCKCHAIN QUERY ERROR:", {
       function: "getPoolStats",
       error: error,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
     throw error;
   }
@@ -109,10 +114,14 @@ export const openLeveragePosition = async (params: {
     const signer = contract.signer; // Get the signer from the contract instance
 
     // Convert collateralLINK to BigNumber (18 decimals)
-    const collateralLINKWei = ethers.utils.parseUnits(params.collateralLINK, 18);
+    const collateralLINKWei = ethers.utils.parseUnits(
+      params.collateralLINK,
+      18
+    );
 
     // Calculate expiryTime in seconds (from minutes)
-    const expiryTimeSeconds = Math.floor(Date.now() / 1000) + (params.expiryDuration * 60);
+    const expiryTimeSeconds =
+      Math.floor(Date.now() / 1000) + params.expiryDuration * 60;
 
     // Log blockchain transaction input data
     console.log("🔗 BLOCKCHAIN TRANSACTION INPUT:", {
@@ -125,29 +134,41 @@ export const openLeveragePosition = async (params: {
       stripePaymentIntentId: params.stripePaymentIntentId,
       stripeCustomerId: params.stripeCustomerId,
       stripePaymentMethodId: params.stripePaymentMethodId,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     // Check and approve LINK tokens to the contract if necessary
     const linkTokenAddress = "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5"; // From Integration.md
     const linkContract = new ethers.Contract(
-      linkTokenAddress, 
+      linkTokenAddress,
       [
         "function approve(address spender, uint256 amount) returns (bool)",
-        "function allowance(address owner, address spender) view returns (uint256)"
-      ], 
+        "function allowance(address owner, address spender) view returns (uint256)",
+      ],
       signer
     );
 
     // Check current allowance
-    const currentAllowance = await linkContract.allowance(await signer.getAddress(), contract.address);
-    console.log(`Current LINK allowance: ${ethers.utils.formatEther(currentAllowance)} LINK`);
+    const currentAllowance = await linkContract.allowance(
+      await signer.getAddress(),
+      contract.address
+    );
+    console.log(
+      `Current LINK allowance: ${ethers.utils.formatEther(
+        currentAllowance
+      )} LINK`
+    );
     console.log(`Required LINK amount: ${params.collateralLINK} LINK`);
 
     // Only approve if current allowance is insufficient
     if (currentAllowance.lt(collateralLINKWei)) {
-      console.log(`Insufficient allowance. Approving ${params.collateralLINK} LINK for CreditShaftLeverage contract...`);
-      const approveTx = await linkContract.approve(contract.address, collateralLINKWei);
+      console.log(
+        `Insufficient allowance. Approving ${params.collateralLINK} LINK for CreditShaftLeverage contract...`
+      );
+      const approveTx = await linkContract.approve(
+        contract.address,
+        collateralLINKWei
+      );
       await approveTx.wait();
       console.log("LINK approval successful:", approveTx.hash);
     } else {
@@ -172,7 +193,7 @@ export const openLeveragePosition = async (params: {
       gasPrice: tx.gasPrice?.toString(),
       nonce: tx.nonce,
       data: tx.data,
-      value: tx.value?.toString()
+      value: tx.value?.toString(),
     });
 
     const receipt = await tx.wait();
@@ -183,7 +204,7 @@ export const openLeveragePosition = async (params: {
       blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed?.toString(),
       status: receipt.status,
-      events: receipt.events?.length || 0
+      events: receipt.events?.length || 0,
     });
 
     return receipt;
@@ -194,12 +215,14 @@ export const openLeveragePosition = async (params: {
         leverageRatio: params.leverageRatio,
         collateralLINK: params.collateralLINK,
         expiryDurationMinutes: params.expiryDuration,
-        stripePaymentIntentId: params.stripePaymentIntentId?.substring(0, 20) + "...",
+        stripePaymentIntentId:
+          params.stripePaymentIntentId?.substring(0, 20) + "...",
         stripeCustomerId: params.stripeCustomerId?.substring(0, 20) + "...",
-        stripePaymentMethodId: params.stripePaymentMethodId?.substring(0, 20) + "...",
+        stripePaymentMethodId:
+          params.stripePaymentMethodId?.substring(0, 20) + "...",
       },
       error: error,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
     throw error;
   }
@@ -217,7 +240,7 @@ export const closeLeveragePosition = async () => {
     console.log("🔗 BLOCKCHAIN TRANSACTION INPUT:", {
       function: "closeLeveragePosition",
       stripePaymentIntentId: stripePaymentIntentId?.substring(0, 20) + "...",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     const tx = await contract.closeLeveragePosition();
@@ -230,7 +253,7 @@ export const closeLeveragePosition = async () => {
       gasPrice: tx.gasPrice?.toString(),
       nonce: tx.nonce,
       data: tx.data,
-      value: tx.value?.toString()
+      value: tx.value?.toString(),
     });
 
     const receipt = await tx.wait();
@@ -240,14 +263,17 @@ export const closeLeveragePosition = async () => {
       blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed?.toString(),
       status: receipt.status,
-      events: receipt.events?.length || 0
+      events: receipt.events?.length || 0,
     });
 
     // After successful blockchain transaction, cancel Stripe pre-authorization
     if (stripePaymentIntentId && stripePaymentIntentId !== "") {
       try {
-        console.log("📱 CANCELLING STRIPE PRE-AUTHORIZATION:", stripePaymentIntentId);
-        
+        console.log(
+          "📱 CANCELLING STRIPE PRE-AUTHORIZATION:",
+          stripePaymentIntentId
+        );
+
         const cancelResponse = await fetch("/api/stripe/cancel-preauth", {
           method: "POST",
           headers: {
@@ -259,7 +285,7 @@ export const closeLeveragePosition = async () => {
         });
 
         const cancelData = await cancelResponse.json();
-        
+
         if (cancelData.success) {
           console.log("📱 STRIPE PRE-AUTHORIZATION CANCELLED SUCCESSFULLY:", {
             paymentIntentId: cancelData.paymentIntent.id,
@@ -274,7 +300,9 @@ export const closeLeveragePosition = async () => {
         // Don't throw error - blockchain transaction was successful
       }
     } else {
-      console.log("📱 NO STRIPE PAYMENT INTENT ID FOUND - SKIPPING CANCELLATION");
+      console.log(
+        "📱 NO STRIPE PAYMENT INTENT ID FOUND - SKIPPING CANCELLATION"
+      );
     }
 
     return receipt;
@@ -282,7 +310,7 @@ export const closeLeveragePosition = async () => {
     console.error("🔗 BLOCKCHAIN TRANSACTION ERROR:", {
       function: "closeLeveragePosition",
       error: error,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
     throw error;
   }
@@ -341,7 +369,7 @@ export const addLiquidity = async (ethAmount: string) => {
       function: "addLiquidity",
       ethAmount: ethAmount,
       valueWei: valueWei.toString(),
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     const tx = await contract.addLiquidity({
@@ -357,7 +385,7 @@ export const addLiquidity = async (ethAmount: string) => {
       gasPrice: tx.gasPrice?.toString(),
       nonce: tx.nonce,
       data: tx.data,
-      value: tx.value?.toString()
+      value: tx.value?.toString(),
     });
 
     const receipt = await tx.wait();
@@ -368,7 +396,7 @@ export const addLiquidity = async (ethAmount: string) => {
       blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed?.toString(),
       status: receipt.status,
-      events: receipt.events?.length || 0
+      events: receipt.events?.length || 0,
     });
 
     return receipt;
@@ -377,10 +405,10 @@ export const addLiquidity = async (ethAmount: string) => {
       function: "addLiquidity",
       parameters: {
         ethAmount: ethAmount,
-        valueWei: ethers.utils.parseEther(ethAmount).toString()
+        valueWei: ethers.utils.parseEther(ethAmount).toString(),
       },
       error: error,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
     throw error;
   }
@@ -396,7 +424,7 @@ export const removeLiquidity = async (shares: string) => {
       function: "removeLiquidity",
       shares: shares,
       sharesWei: sharesWei.toString(),
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     const tx = await contract.removeLiquidity(sharesWei);
@@ -410,7 +438,7 @@ export const removeLiquidity = async (shares: string) => {
       gasPrice: tx.gasPrice?.toString(),
       nonce: tx.nonce,
       data: tx.data,
-      value: tx.value?.toString()
+      value: tx.value?.toString(),
     });
 
     const receipt = await tx.wait();
@@ -421,7 +449,7 @@ export const removeLiquidity = async (shares: string) => {
       blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed?.toString(),
       status: receipt.status,
-      events: receipt.events?.length || 0
+      events: receipt.events?.length || 0,
     });
 
     return receipt;
@@ -430,10 +458,10 @@ export const removeLiquidity = async (shares: string) => {
       function: "removeLiquidity",
       parameters: {
         shares: shares,
-        sharesWei: ethers.utils.parseEther(shares).toString()
+        sharesWei: ethers.utils.parseEther(shares).toString(),
       },
       error: error,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
     throw error;
   }

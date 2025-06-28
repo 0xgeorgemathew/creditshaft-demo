@@ -115,7 +115,7 @@ export default function BorrowingInterface({
   const totalSuppliedLINK = useMemo(() => {
     if (linkCollateralAmountValue <= 0 || selectedLeverageRatio < 150 || linkPrice <= 0) return 0;
     return linkCollateralAmountValue * (selectedLeverageRatio / 100);
-  }, [linkCollateralAmountValue, selectedLeverageRatio]);
+  }, [linkCollateralAmountValue, selectedLeverageRatio, linkPrice]);
 
   const requiredPreAuth = useMemo(() => {
     // preAuthAmount = 150% of borrowedUSDC
