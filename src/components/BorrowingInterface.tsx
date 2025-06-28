@@ -16,10 +16,12 @@ import {
   Shield,
   Zap,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { getRiskLevel, getCollateralizationRatio } from "@/lib/chainlink-price";
 import { useContractOperations } from "@/hooks/useContract";
-import { getLINKPrice } from "@/lib/contract"; // Import getLINKPrice
+import { getLINKPrice, mintLINK } from "@/lib/contract"; // Import getLINKPrice and mintLINK
+import { useAccount } from "wagmi";
 
 interface BorrowingInterfaceProps {
   preAuthData: PreAuthData;
@@ -30,6 +32,7 @@ export default function BorrowingInterface({
   preAuthData,
   onBorrowSuccess,
 }: BorrowingInterfaceProps) {
+  const { address } = useAccount();
   const { openLeveragePosition, loading: contractLoading } = useContractOperations();
   const [linkPrice, setLinkPrice] = useState(0); // No fallback price - must fetch from contract
   const [linkPriceSource, setLinkPriceSource] = useState("loading");
@@ -38,6 +41,8 @@ export default function BorrowingInterface({
   const [selectedLeverageRatio, setSelectedLeverageRatio] = useState(200); // Default 2x leverage (200%)
   const [selectedDuration, setSelectedDuration] = useState(1); // Default 1 minute
   const [isProcessing, setIsProcessing] = useState(false);
+  const [mintLoading, setMintLoading] = useState(false);
+  const [mintMessage, setMintMessage] = useState("");
   const isLoading = isProcessing || contractLoading;
   const [borrowSuccess, setBorrowSuccess] = useState(false);
   const [txHash, setTxHash] = useState("");
@@ -222,6 +227,30 @@ export default function BorrowingInterface({
     navigator.clipboard.writeText(txHash);
   };
 
+  const handleMintLINK = async () => {
+    if (!address) {
+      setMintMessage("Wallet not connected");
+      return;
+    }
+
+    setMintLoading(true);
+    setMintMessage("");
+
+    try {
+      const receipt = await mintLINK(address);
+      setMintMessage(`Successfully minted 1000 LINK! Transaction: ${receipt.transactionHash.substring(0, 10)}...`);
+      // Clear message after 5 seconds
+      setTimeout(() => setMintMessage(""), 5000);
+    } catch (error) {
+      console.error("Error minting LINK:", error);
+      setMintMessage((error as Error).message || "Failed to mint LINK");
+      // Clear message after 5 seconds
+      setTimeout(() => setMintMessage(""), 5000);
+    } finally {
+      setMintLoading(false);
+    }
+  };
+
   if (borrowSuccess) {
     return (
       <div className="glassmorphism rounded-2xl p-8 border border-green-500/30 bg-gradient-to-br from-green-500/10 to-emerald-500/10">
@@ -236,7 +265,7 @@ export default function BorrowingInterface({
             <p className="text-3xl font-bold text-green-400">
               ${borrowedUSDC.toFixed(2)} {selectedAsset}
             </p>
-            <p className="text-sm text-blue-300">
+            <p className="text-sm text-blue-600">
               ≈ {linkCollateralAmountValue.toFixed(4)} LINK collateral
             </p>
             <p className="text-sm text-gray-400 mt-2">
@@ -253,7 +282,7 @@ export default function BorrowingInterface({
               <span className="text-sm text-gray-300">Transaction Hash:</span>
               <button
                 onClick={copyTxHash}
-                className="text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
+                className="text-blue-500 hover:text-blue-400 flex items-center gap-1 transition-colors"
               >
                 <Copy size={14} />
                 Copy
@@ -265,15 +294,15 @@ export default function BorrowingInterface({
           </div>
 
           <div className="space-y-4 text-left max-w-md mx-auto">
-            <div className="card-gradient rounded-xl p-4 border border-blue-500/30">
-              <h4 className="font-semibold text-blue-300 mb-2">
+            <div className="card-gradient rounded-xl p-4 border border-blue-600/30">
+              <h4 className="font-semibold text-blue-400 mb-2">
                 What happens next?
               </h4>
-              <ul className="text-sm text-blue-200 space-y-1">
+              <ul className="text-sm text-blue-300 space-y-1">
                 <li className="flex items-start gap-2">
                   <CreditCard
                     size={14}
-                    className="text-blue-400 mt-0.5 flex-shrink-0"
+                    className="text-blue-500 mt-0.5 flex-shrink-0"
                   />
                   <span>
                     Your credit card has a ${requiredPreAuth.toLocaleString()}{" "}
@@ -364,9 +393,28 @@ export default function BorrowingInterface({
               />
             </div>
             <div className="mt-2 space-y-1">
-              <p className="text-sm text-gray-300">
-                Maximum: {maxLinkCollateral.toLocaleString()} LINK (arbitrary limit)
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-300">
+                  Maximum: {maxLinkCollateral.toLocaleString()} LINK (arbitrary limit)
+                </p>
+                <button
+                  onClick={handleMintLINK}
+                  disabled={mintLoading || !address}
+                  className="px-3 py-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs font-medium rounded-md hover:from-blue-600 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {mintLoading ? (
+                    <Loader2 className="animate-spin" size={12} />
+                  ) : (
+                    <Zap size={12} />
+                  )}
+                  Mint 1000 LINK
+                </button>
+              </div>
+              {mintMessage && (
+                <p className={`text-xs ${mintMessage.includes('Successfully') ? 'text-green-300' : 'text-red-300'}`}>
+                  {mintMessage}
+                </p>
+              )}
               {linkCollateralAmountValue > 0 && (
                 <div className="space-y-1">
                   <p className="text-sm text-green-300 font-semibold">
@@ -413,13 +461,13 @@ export default function BorrowingInterface({
                       ${selectedLeverageRatio <= 250 
                         ? '#10b981' 
                         : selectedLeverageRatio <= 400 
-                        ? '#3b82f6' 
-                        : '#f59e0b'} 0%, 
+                        ? '#375bd2' 
+                        : '#e84142'} 0%, 
                       ${selectedLeverageRatio <= 250 
                         ? '#10b981' 
                         : selectedLeverageRatio <= 400 
-                        ? '#3b82f6' 
-                        : '#f59e0b'} ${((selectedLeverageRatio - 150) / (500 - 150)) * 100}%, 
+                        ? '#375bd2' 
+                        : '#e84142'} ${((selectedLeverageRatio - 150) / (500 - 150)) * 100}%, 
                       rgba(255,255,255,0.2) ${((selectedLeverageRatio - 150) / (500 - 150)) * 100}%, 
                       rgba(255,255,255,0.2) 100%)`,
                   }}
@@ -451,7 +499,7 @@ export default function BorrowingInterface({
                   onClick={() => setSelectedLeverageRatio(300)}
                   className={`px-2 py-1 rounded transition-colors ${
                     selectedLeverageRatio === 300
-                      ? "text-blue-300 bg-blue-500/20"
+                      ? "text-blue-400 bg-blue-600/20"
                       : "hover:text-white"
                   }`}
                 >
@@ -461,7 +509,7 @@ export default function BorrowingInterface({
                   onClick={() => setSelectedLeverageRatio(500)}
                   className={`px-2 py-1 rounded transition-colors ${
                     selectedLeverageRatio === 500
-                      ? "text-amber-300 bg-amber-500/20"
+                      ? "text-red-400 bg-red-500/20"
                       : "hover:text-white"
                   }`}
                 >
@@ -471,7 +519,7 @@ export default function BorrowingInterface({
 
               <div className="mt-3 text-xs text-gray-400 space-y-1">
                 <div className="flex items-center gap-2">
-                  <Lightbulb size={12} className="text-blue-400" />
+                  <Lightbulb size={12} className="text-blue-500" />
                   <span>Higher leverage = Higher potential returns, higher risk</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -481,7 +529,7 @@ export default function BorrowingInterface({
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <AlertCircle size={12} className="text-amber-400" />
+                  <AlertCircle size={12} className="text-red-400" />
                   <span>
                     Risk: LINK price falling reduces your safety margin
                   </span>

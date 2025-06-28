@@ -207,12 +207,12 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 relative overflow-hidden flex flex-col">
       {/* Animated background elements */}
       <div className="absolute inset-0 opacity-40">
         <div className="absolute top-20 left-20 w-72 h-72 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full mix-blend-multiply filter blur-2xl float-dynamic-1 shadow-2xl"></div>
-        <div className="absolute top-40 right-20 w-72 h-72 bg-gradient-to-r from-purple-400 to-purple-600 rounded-full mix-blend-multiply filter blur-2xl float-dynamic-2 shadow-2xl"></div>
-        <div className="absolute bottom-20 left-40 w-72 h-72 bg-gradient-to-r from-pink-400 to-pink-600 rounded-full mix-blend-multiply filter blur-2xl float-dynamic-3 shadow-2xl"></div>
+        <div className="absolute top-40 right-20 w-72 h-72 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full mix-blend-multiply filter blur-2xl float-dynamic-2 shadow-2xl"></div>
+        <div className="absolute bottom-20 left-40 w-72 h-72 bg-gradient-to-r from-red-400 to-red-500 rounded-full mix-blend-multiply filter blur-2xl float-dynamic-3 shadow-2xl"></div>
       </div>
 
       {/* Header */}
@@ -221,7 +221,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-6 max-w-7xl">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg glow-blue">
+                <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg glow-blue">
                   <Zap className="text-white" size={24} />
                 </div>
                 <h1 className="text-3xl font-bold text-white">
@@ -351,9 +351,9 @@ export default function Home() {
 
                   <div className="grid md:grid-cols-2 gap-8 mb-8">
                     {/* Borrow Option */}
-                    <div className="group bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-2xl p-6 hover:from-blue-500/15 hover:to-purple-500/15 transition-all duration-300 cursor-pointer"
+                    <div className="group bg-gradient-to-br from-blue-600/10 to-blue-700/10 border border-blue-600/20 rounded-2xl p-6 hover:from-blue-600/15 hover:to-blue-700/15 transition-all duration-300 cursor-pointer"
                          onClick={() => setActiveTab("setup")}>
-                      <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center mb-4">
+                      <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl flex items-center justify-center mb-4">
                         <CreditCard className="text-white" size={24} />
                       </div>
                       <h3 className="text-xl font-bold text-white mb-3">
@@ -429,7 +429,7 @@ export default function Home() {
                         onClick={() => setActiveTab("overview")}
                         className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
                           activeTab === "overview"
-                            ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
+                            ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white"
                             : "text-gray-300 hover:text-white hover:bg-white/10"
                         }`}
                       >
@@ -440,7 +440,7 @@ export default function Home() {
                         onClick={() => setActiveTab("borrow")}
                         className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
                           activeTab === "borrow"
-                            ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
+                            ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white"
                             : "text-gray-300 hover:text-white hover:bg-white/10"
                         }`}
                       >
@@ -451,7 +451,7 @@ export default function Home() {
                         onClick={() => setActiveTab("manage")}
                         className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
                           activeTab === "manage"
-                            ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
+                            ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white"
                             : "text-gray-300 hover:text-white hover:bg-white/10"
                         }`}
                       >
@@ -516,14 +516,14 @@ export default function Home() {
 
         {/* Demo Info */}
         {isConnected && (
-          <div className="mt-16 glassmorphism rounded-2xl p-6 border border-yellow-500/30 bg-gradient-to-r from-yellow-500/10 to-orange-500/10">
+          <div className="mt-16 glassmorphism rounded-2xl p-6 border border-red-500/30 bg-gradient-to-r from-red-500/10 to-red-600/10">
             <div className="flex items-center gap-3 mb-3">
-              <Sparkles className="text-yellow-400" size={24} />
-              <h3 className="text-yellow-300 font-bold text-lg">
+              <Sparkles className="text-red-400" size={24} />
+              <h3 className="text-red-300 font-bold text-lg">
                 Hackathon Demo Mode
               </h3>
             </div>
-            <p className="text-yellow-100 leading-relaxed">
+            <p className="text-red-100 leading-relaxed">
               This is a demonstration for hackathon purposes. No real money or
               credit cards are being used. All transactions are on Sepolia
               testnet. Your session is preserved across page refreshes.
@@ -586,7 +586,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-4">
-              <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg"></div>
+              <div className="w-6 h-6 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg"></div>
               <span className="text-gray-300 font-semibold">
                 Built by Third Leg Ventures
               </span>

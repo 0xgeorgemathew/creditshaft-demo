@@ -136,7 +136,7 @@ function StripeForm({ walletAddress, onPreAuthSuccess }: StripePreAuthProps) {
   return (
     <div className="glassmorphism rounded-2xl shadow-2xl p-8 border border-white/20">
       <div className="flex items-center gap-3 mb-8">
-        <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
+        <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl flex items-center justify-center">
           <CreditCard className="text-white" size={24} />
         </div>
         <h2 className="text-3xl font-bold text-white">Add Credit Card</h2>

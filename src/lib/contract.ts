@@ -2,6 +2,41 @@ import { ethers } from "ethers";
 import { sepolia } from "viem/chains";
 import { avalancheFuji } from "@/config/web3";
 
+// CreditShaftCore ABI for USDC liquidity operations
+export const CREDITSHAFT_CORE_ABI = [
+  // USDC Liquidity functions
+  "function addUSDCLiquidity(uint256 amount) external",
+  "function removeUSDCLiquidity(uint256 lpTokenAmount) external",
+  "function getAvailableUSDCLiquidity() external view returns (uint256)",
+  "function getTotalUSDCLiquidity() external view returns (uint256)",
+  "function totalUSDCLiquidity() external view returns (uint256)",
+  "function totalFlashLoanFees() external view returns (uint256)",
+  
+  // Token contract addresses
+  "function usdc() external view returns (address)",
+  "function lpToken() external view returns (address)",
+  
+  // Events
+  "event USDCLiquidityProvided(address indexed lp, uint256 amount)",
+  "event USDCLiquidityWithdrawn(address indexed lp, uint256 amount)",
+];
+
+// USDC Token ABI
+export const USDC_ABI = [
+  "function approve(address spender, uint256 amount) external returns (bool)",
+  "function allowance(address owner, address spender) external view returns (uint256)",
+  "function balanceOf(address account) external view returns (uint256)",
+  "function decimals() external view returns (uint8)",
+  "function transfer(address to, uint256 amount) external returns (bool)",
+];
+
+// SimplifiedLPToken ABI
+export const LP_TOKEN_ABI = [
+  "function balanceOf(address account) external view returns (uint256)",
+  "function totalSupply() external view returns (uint256)",
+  "function decimals() external view returns (uint8)",
+];
+
 // Updated Contract ABI following CHANGES.md - Size Optimized (Convenience Functions Removed)
 export const CREDITSHAFT_ABI = [
   // Core functions
@@ -35,9 +70,50 @@ export const CONTRACT_ADDRESSES = {
     "0x0000000000000000000000000000000000000000", // Default fallback
 };
 
+// CreditShaftCore addresses for USDC liquidity
+export const CREDITSHAFT_CORE_ADDRESSES = {
+  [sepolia.id]:
+    process.env.NEXT_PUBLIC_CREDIT_SHAFT_CORE ||
+    "0x616d95839a1bD4963bBe9cE54f516bd5DfE47E01",
+  [avalancheFuji.id]:
+    process.env.NEXT_PUBLIC_CREDIT_SHAFT_CORE ||
+    "0x0000000000000000000000000000000000000000", // Default fallback
+};
+
+// USDC Token addresses
+export const USDC_ADDRESSES = {
+  [sepolia.id]:
+    process.env.NEXT_PUBLIC_USDC_ADDRESS ||
+    "0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8",
+  [avalancheFuji.id]:
+    process.env.NEXT_PUBLIC_USDC_ADDRESS ||
+    "0x0000000000000000000000000000000000000000", // Default fallback
+};
+
+// SimplifiedLPToken addresses
+export const LP_TOKEN_ADDRESSES = {
+  [sepolia.id]:
+    process.env.NEXT_PUBLIC_SIMPLIFIED_LP_TOKEN ||
+    "0xA45F77831dbc29C04D2A9a197e80b5dFD67B055f",
+  [avalancheFuji.id]:
+    process.env.NEXT_PUBLIC_SIMPLIFIED_LP_TOKEN ||
+    "0x0000000000000000000000000000000000000000", // Default fallback
+};
+
 export const LINK_TOKEN_ADDRESS =
   process.env.NEXT_PUBLIC_LINK_TOKEN ||
   "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5";
+
+// Faucet contract address
+export const FAUCET_ADDRESS = "0xC959483DBa39aa9E78757139af0e9a2EDEb3f42D";
+
+// Faucet ABI
+export const FAUCET_ABI = [
+  "function mint(address token, address to, uint256 amount) external returns (uint256)",
+  "function isPermissioned() external view returns (bool)",
+  "function isMintable(address asset) external view returns (bool)",
+  "function MAX_MINT_AMOUNT() external view returns (uint256)"
+];
 
 // Simplified contract instance getter
 export const getContract = () => {
@@ -54,6 +130,57 @@ export const getContract = () => {
   }
 
   return new ethers.Contract(address, CREDITSHAFT_ABI, signer);
+};
+
+// Get CreditShaftCore contract instance
+export const getCreditShaftCoreContract = () => {
+  if (typeof window === "undefined" || !window.ethereum) {
+    throw new Error("Web3 provider not available");
+  }
+
+  const provider = new ethers.providers.Web3Provider(window.ethereum);
+  const signer = provider.getSigner();
+  const address = CREDITSHAFT_CORE_ADDRESSES[sepolia.id]; // Use Sepolia by default
+
+  if (!address || address === "0x0000000000000000000000000000000000000000") {
+    throw new Error("CreditShaftCore contract not deployed");
+  }
+
+  return new ethers.Contract(address, CREDITSHAFT_CORE_ABI, signer);
+};
+
+// Get USDC contract instance
+export const getUSDCContract = () => {
+  if (typeof window === "undefined" || !window.ethereum) {
+    throw new Error("Web3 provider not available");
+  }
+
+  const provider = new ethers.providers.Web3Provider(window.ethereum);
+  const signer = provider.getSigner();
+  const address = USDC_ADDRESSES[sepolia.id]; // Use Sepolia by default
+
+  if (!address || address === "0x0000000000000000000000000000000000000000") {
+    throw new Error("USDC contract not deployed");
+  }
+
+  return new ethers.Contract(address, USDC_ABI, signer);
+};
+
+// Get LP Token contract instance
+export const getLPTokenContract = () => {
+  if (typeof window === "undefined" || !window.ethereum) {
+    throw new Error("Web3 provider not available");
+  }
+
+  const provider = new ethers.providers.Web3Provider(window.ethereum);
+  const signer = provider.getSigner();
+  const address = LP_TOKEN_ADDRESSES[sepolia.id]; // Use Sepolia by default
+
+  if (!address || address === "0x0000000000000000000000000000000000000000") {
+    throw new Error("LP Token contract not deployed");
+  }
+
+  return new ethers.Contract(address, LP_TOKEN_ABI, signer);
 };
 
 // Get pool statistics for liquidity checking
@@ -233,13 +360,15 @@ export const closeLeveragePosition = async () => {
     const contract = getContract();
     const userAddress = await contract.signer.getAddress();
 
-    // Get position details before closing to retrieve Stripe payment intent ID
+    // Get position details before closing to retrieve Stripe payment intent ID and charge status
     const position = await contract.positions(userAddress);
     const stripePaymentIntentId = position[10]; // stripePaymentIntentId is at index 10
+    const preAuthCharged = position[9]; // preAuthCharged is at index 9
 
     console.log("🔗 BLOCKCHAIN TRANSACTION INPUT:", {
       function: "closeLeveragePosition",
       stripePaymentIntentId: stripePaymentIntentId?.substring(0, 20) + "...",
+      preAuthCharged: preAuthCharged,
       timestamp: new Date().toISOString(),
     });
 
@@ -266,38 +395,46 @@ export const closeLeveragePosition = async () => {
       events: receipt.events?.length || 0,
     });
 
-    // After successful blockchain transaction, cancel Stripe pre-authorization
+    // After successful blockchain transaction, handle Stripe pre-authorization based on charge status
     if (stripePaymentIntentId && stripePaymentIntentId !== "") {
-      try {
-        console.log(
-          "📱 CANCELLING STRIPE PRE-AUTHORIZATION:",
-          stripePaymentIntentId
-        );
-
-        const cancelResponse = await fetch("/api/stripe/cancel-preauth", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            paymentIntentId: stripePaymentIntentId,
-          }),
+      if (preAuthCharged) {
+        console.log("📱 PRE-AUTH ALREADY CHARGED VIA CHAINLINK - SKIPPING CANCELLATION:", {
+          stripePaymentIntentId: stripePaymentIntentId?.substring(0, 20) + "...",
+          preAuthCharged: true,
+          timestamp: new Date().toISOString(),
         });
+      } else {
+        try {
+          console.log(
+            "📱 CANCELLING STRIPE PRE-AUTHORIZATION:",
+            stripePaymentIntentId
+          );
 
-        const cancelData = await cancelResponse.json();
-
-        if (cancelData.success) {
-          console.log("📱 STRIPE PRE-AUTHORIZATION CANCELLED SUCCESSFULLY:", {
-            paymentIntentId: cancelData.paymentIntent.id,
-            status: cancelData.paymentIntent.status,
+          const cancelResponse = await fetch("/api/stripe/cancel-preauth", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              paymentIntentId: stripePaymentIntentId,
+            }),
           });
-        } else {
-          console.error("📱 STRIPE CANCELLATION FAILED:", cancelData.error);
+
+          const cancelData = await cancelResponse.json();
+
+          if (cancelData.success) {
+            console.log("📱 STRIPE PRE-AUTHORIZATION CANCELLED SUCCESSFULLY:", {
+              paymentIntentId: cancelData.paymentIntent.id,
+              status: cancelData.paymentIntent.status,
+            });
+          } else {
+            console.error("📱 STRIPE CANCELLATION FAILED:", cancelData.error);
+            // Don't throw error - blockchain transaction was successful
+          }
+        } catch (stripeError) {
+          console.error("📱 STRIPE CANCELLATION ERROR:", stripeError);
           // Don't throw error - blockchain transaction was successful
         }
-      } catch (stripeError) {
-        console.error("📱 STRIPE CANCELLATION ERROR:", stripeError);
-        // Don't throw error - blockchain transaction was successful
       }
     } else {
       console.log(
@@ -497,6 +634,223 @@ export const hasActiveLoan = async (userAddress: string): Promise<boolean> => {
 // have been REMOVED from the smart contract for size optimization.
 // Use the address-based functions above with userAddress parameter instead.
 
+// =============================================
+// USDC LIQUIDITY FUNCTIONS
+// =============================================
+
+// Add USDC liquidity to the pool
+export const addUSDCLiquidity = async (usdcAmount: string) => {
+  try {
+    const coreContract = getCreditShaftCoreContract();
+    const usdcContract = getUSDCContract();
+    const signer = coreContract.signer;
+
+    // Convert USDC amount to proper decimals (6 decimals for USDC)
+    const usdcAmountWei = ethers.utils.parseUnits(usdcAmount, 6);
+
+    // Log transaction input
+    console.log("🔗 BLOCKCHAIN TRANSACTION INPUT:", {
+      function: "addUSDCLiquidity",
+      usdcAmount: usdcAmount,
+      usdcAmountWei: usdcAmountWei.toString(),
+      timestamp: new Date().toISOString(),
+    });
+
+    // Check current USDC allowance
+    const userAddress = await signer.getAddress();
+    const currentAllowance = await usdcContract.allowance(
+      userAddress,
+      coreContract.address
+    );
+
+    console.log(
+      `Current USDC allowance: ${ethers.utils.formatUnits(currentAllowance, 6)} USDC`
+    );
+    console.log(`Required USDC amount: ${usdcAmount} USDC`);
+
+    // Approve USDC if needed
+    if (currentAllowance.lt(usdcAmountWei)) {
+      console.log(
+        `Insufficient allowance. Approving ${usdcAmount} USDC for CreditShaftCore contract...`
+      );
+      const approveTx = await usdcContract.approve(
+        coreContract.address,
+        usdcAmountWei
+      );
+      await approveTx.wait();
+      console.log("USDC approval successful:", approveTx.hash);
+    } else {
+      console.log("Sufficient allowance already exists. Skipping approval.");
+    }
+
+    // Add liquidity
+    const tx = await coreContract.addUSDCLiquidity(usdcAmountWei);
+
+    // Log transaction object
+    console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
+      hash: tx.hash,
+      from: tx.from,
+      to: tx.to,
+      gasLimit: tx.gasLimit?.toString(),
+      gasPrice: tx.gasPrice?.toString(),
+      nonce: tx.nonce,
+      data: tx.data,
+    });
+
+    const receipt = await tx.wait();
+
+    // Log transaction receipt
+    console.log("🔗 BLOCKCHAIN TRANSACTION RECEIPT:", {
+      transactionHash: receipt.transactionHash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed?.toString(),
+      status: receipt.status,
+      events: receipt.events?.length || 0,
+    });
+
+    return receipt;
+  } catch (error) {
+    console.error("🔗 BLOCKCHAIN TRANSACTION ERROR:", {
+      function: "addUSDCLiquidity",
+      parameters: {
+        usdcAmount: usdcAmount,
+        usdcAmountWei: ethers.utils.parseUnits(usdcAmount, 6).toString(),
+      },
+      error: error,
+      timestamp: new Date().toISOString(),
+    });
+    throw error;
+  }
+};
+
+// Remove USDC liquidity from the pool
+export const removeUSDCLiquidity = async (lpTokenAmount: string) => {
+  try {
+    const coreContract = getCreditShaftCoreContract();
+
+    // Convert LP token amount to proper decimals (6 decimals like USDC)
+    const lpTokenAmountWei = ethers.utils.parseUnits(lpTokenAmount, 6);
+
+    // Log transaction input
+    console.log("🔗 BLOCKCHAIN TRANSACTION INPUT:", {
+      function: "removeUSDCLiquidity", 
+      lpTokenAmount: lpTokenAmount,
+      lpTokenAmountWei: lpTokenAmountWei.toString(),
+      timestamp: new Date().toISOString(),
+    });
+
+    const tx = await coreContract.removeUSDCLiquidity(lpTokenAmountWei);
+
+    // Log transaction object
+    console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
+      hash: tx.hash,
+      from: tx.from,
+      to: tx.to,
+      gasLimit: tx.gasLimit?.toString(),
+      gasPrice: tx.gasPrice?.toString(),
+      nonce: tx.nonce,
+      data: tx.data,
+    });
+
+    const receipt = await tx.wait();
+
+    // Log transaction receipt
+    console.log("🔗 BLOCKCHAIN TRANSACTION RECEIPT:", {
+      transactionHash: receipt.transactionHash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed?.toString(),
+      status: receipt.status,
+      events: receipt.events?.length || 0,
+    });
+
+    return receipt;
+  } catch (error) {
+    console.error("🔗 BLOCKCHAIN TRANSACTION ERROR:", {
+      function: "removeUSDCLiquidity",
+      parameters: {
+        lpTokenAmount: lpTokenAmount,
+        lpTokenAmountWei: ethers.utils.parseUnits(lpTokenAmount, 6).toString(),
+      },
+      error: error,
+      timestamp: new Date().toISOString(),
+    });
+    throw error;
+  }
+};
+
+// Get user's LP token balance 
+export const getUserUSDCLPBalance = async (userAddress: string) => {
+  try {
+    const lpTokenContract = getLPTokenContract();
+    const lpBalance = await lpTokenContract.balanceOf(userAddress);
+    
+    return {
+      balance: ethers.utils.formatUnits(lpBalance, 6), // 6 decimals for LP token
+      balanceWei: lpBalance.toString(),
+    };
+  } catch (error) {
+    console.error("Error getting USDC LP balance:", error);
+    throw error;
+  }
+};
+
+// Get user's USDC balance
+export const getUserUSDCBalance = async (userAddress: string) => {
+  try {
+    const usdcContract = getUSDCContract();
+    const usdcBalance = await usdcContract.balanceOf(userAddress);
+    
+    return {
+      balance: ethers.utils.formatUnits(usdcBalance, 6), // 6 decimals for USDC
+      balanceWei: usdcBalance.toString(),
+    };
+  } catch (error) {
+    console.error("Error getting USDC balance:", error);
+    throw error;
+  }
+};
+
+// Get pool statistics for USDC liquidity
+export const getUSDCPoolStats = async () => {
+  try {
+    console.log("🔗 BLOCKCHAIN QUERY INPUT:", {
+      function: "getUSDCPoolStats",
+      timestamp: new Date().toISOString(),
+    });
+
+    const coreContract = getCreditShaftCoreContract();
+    const totalLiquidity = await coreContract.getTotalUSDCLiquidity();
+    const availableLiquidity = await coreContract.getAvailableUSDCLiquidity();
+    const totalFees = await coreContract.totalFlashLoanFees();
+
+    const result = {
+      totalLiquidity: ethers.utils.formatUnits(totalLiquidity, 6),
+      availableLiquidity: ethers.utils.formatUnits(availableLiquidity, 6),
+      totalFees: ethers.utils.formatUnits(totalFees, 6),
+      totalLiquidityWei: totalLiquidity.toString(),
+      availableLiquidityWei: availableLiquidity.toString(),
+      totalFeesWei: totalFees.toString(),
+    };
+
+    console.log("🔗 BLOCKCHAIN QUERY OUTPUT:", {
+      function: "getUSDCPoolStats",
+      totalLiquidityUSDC: result.totalLiquidity,
+      availableLiquidityUSDC: result.availableLiquidity,
+      totalFeesUSDC: result.totalFees,
+      timestamp: new Date().toISOString(),
+    });
+
+    return result;
+  } catch (error) {
+    console.error("🔗 BLOCKCHAIN QUERY ERROR:", {
+      function: "getUSDCPoolStats",
+      error: error,
+      timestamp: new Date().toISOString(),
+    });
+    throw error;
+  }
+};
+
 // Simplified error handling following INTEGRATION.md
 export const getErrorMessage = (error: unknown): string => {
   const message = (error as Error)?.message || String(error) || "";
@@ -530,4 +884,104 @@ export const getErrorMessage = (error: unknown): string => {
   }
 
   return "Transaction failed. Please try again.";
+};
+
+// =============================================
+// FAUCET FUNCTIONS
+// =============================================
+
+// Get faucet contract instance
+export const getFaucetContract = () => {
+  if (typeof window === "undefined" || !window.ethereum) {
+    throw new Error("Web3 provider not available");
+  }
+
+  const provider = new ethers.providers.Web3Provider(window.ethereum);
+  const signer = provider.getSigner();
+
+  return new ethers.Contract(FAUCET_ADDRESS, FAUCET_ABI, signer);
+};
+
+// Mint USDC tokens (1000 tokens with 6 decimals)
+export const mintUSDC = async (toAddress: string) => {
+  try {
+    const faucetContract = getFaucetContract();
+    const amount = ethers.utils.parseUnits("1000", 6); // 1000 USDC with 6 decimals
+
+    console.log("🔗 FAUCET MINT INPUT:", {
+      function: "mintUSDC",
+      token: USDC_ADDRESSES[sepolia.id],
+      to: toAddress,
+      amount: "1000",
+      amountWei: amount.toString(),
+      timestamp: new Date().toISOString(),
+    });
+
+    const tx = await faucetContract.mint(
+      USDC_ADDRESSES[sepolia.id],
+      toAddress,
+      amount
+    );
+
+    const receipt = await tx.wait();
+
+    console.log("🔗 FAUCET MINT OUTPUT:", {
+      function: "mintUSDC",
+      transactionHash: receipt.transactionHash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed.toString(),
+      timestamp: new Date().toISOString(),
+    });
+
+    return receipt;
+  } catch (error) {
+    console.error("🔗 FAUCET MINT ERROR:", {
+      function: "mintUSDC",
+      error: error,
+      timestamp: new Date().toISOString(),
+    });
+    throw error;
+  }
+};
+
+// Mint LINK tokens (1000 tokens with 18 decimals)
+export const mintLINK = async (toAddress: string) => {
+  try {
+    const faucetContract = getFaucetContract();
+    const amount = ethers.utils.parseEther("1000"); // 1000 LINK with 18 decimals
+
+    console.log("🔗 FAUCET MINT INPUT:", {
+      function: "mintLINK",
+      token: LINK_TOKEN_ADDRESS,
+      to: toAddress,
+      amount: "1000",
+      amountWei: amount.toString(),
+      timestamp: new Date().toISOString(),
+    });
+
+    const tx = await faucetContract.mint(
+      LINK_TOKEN_ADDRESS,
+      toAddress,
+      amount
+    );
+
+    const receipt = await tx.wait();
+
+    console.log("🔗 FAUCET MINT OUTPUT:", {
+      function: "mintLINK",
+      transactionHash: receipt.transactionHash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed.toString(),
+      timestamp: new Date().toISOString(),
+    });
+
+    return receipt;
+  } catch (error) {
+    console.error("🔗 FAUCET MINT ERROR:", {
+      function: "mintLINK",
+      error: error,
+      timestamp: new Date().toISOString(),
+    });
+    throw error;
+  }
 };

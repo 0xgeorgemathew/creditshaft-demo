@@ -28,8 +28,8 @@ const config: Config = {
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
         glow: {
-          "0%": { boxShadow: "0 0 20px rgba(59, 130, 246, 0.3)" },
-          "100%": { boxShadow: "0 0 30px rgba(147, 51, 234, 0.4)" },
+          "0%": { boxShadow: "0 0 20px rgba(55, 91, 210, 0.3)" },
+          "100%": { boxShadow: "0 0 30px rgba(232, 65, 66, 0.4)" },
         },
       },
       backdropBlur: {

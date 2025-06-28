@@ -19,7 +19,7 @@ export default function PreAuthStatus({
   return (
     <div className="glassmorphism rounded-2xl shadow-2xl p-8 border border-white/20">
       <div className="flex items-center gap-3 mb-8">
-        <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg">
+        <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg">
           <CreditCard className="text-white" size={24} />
         </div>
         <div className="flex items-center gap-6">
@@ -71,7 +71,7 @@ export default function PreAuthStatus({
 
           <div className="card-gradient rounded-xl p-6 border border-white/10 h-[160px] flex flex-col justify-between">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
                 <Wallet className="text-white" size={20} />
               </div>
               <span className="text-lg font-semibold text-white">
@@ -104,7 +104,7 @@ export default function PreAuthStatus({
 
           <div className="card-gradient rounded-xl p-6 border border-white/10 h-[160px] flex flex-col justify-between">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
                 <Zap className="text-white" size={20} />
               </div>
               <span className="text-lg font-semibold text-white">

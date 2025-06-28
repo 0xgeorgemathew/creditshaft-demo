@@ -59,6 +59,7 @@ export interface PositionStats {
   liquidationPrice: number;
   healthFactor: number;
   timeRemaining: number;
+  currentLTV: number;
   isAtRisk: boolean;
 }
 

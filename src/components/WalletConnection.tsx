@@ -65,7 +65,7 @@ export default function WalletConnection({
   return (
     <div className="glassmorphism rounded-xl shadow-2xl p-8 border border-white/20 card-hover">
       <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+        <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
           <Wallet className="text-white" size={20} />
         </div>
         <h2 className="text-2xl font-bold gradient-text">
@@ -88,7 +88,7 @@ export default function WalletConnection({
                 className="w-full glassmorphism hover:bg-white/10 text-white py-4 px-6 rounded-xl font-semibold transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between border border-white/10 shadow-lg"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-400 rounded-lg flex items-center justify-center">
+                  <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
                     <Zap size={16} />
                   </div>
                   <span className="text-lg">{connector.name}</span>
@@ -110,9 +110,9 @@ export default function WalletConnection({
                     href="https://metamask.io/"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-yellow-100 hover:text-white text-sm flex items-center gap-2 transition-colors p-2 rounded-lg hover:bg-yellow-500/10"
+                    className="text-red-100 hover:text-white text-sm flex items-center gap-2 transition-colors p-2 rounded-lg hover:bg-red-500/10"
                   >
-                    <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+                    <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
                       <span className="text-xs font-bold">M</span>
                     </div>
                     Install MetaMask <ExternalLink size={14} />
@@ -121,7 +121,7 @@ export default function WalletConnection({
                     href="https://www.coinbase.com/wallet"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-yellow-100 hover:text-white text-sm flex items-center gap-2 transition-colors p-2 rounded-lg hover:bg-yellow-500/10"
+                    className="text-red-100 hover:text-white text-sm flex items-center gap-2 transition-colors p-2 rounded-lg hover:bg-red-500/10"
                   >
                     <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
                       <span className="text-xs font-bold">C</span>
