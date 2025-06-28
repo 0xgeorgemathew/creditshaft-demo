@@ -693,7 +693,14 @@ export default function LeverageInterface({
                     {collateralizationRatio.toFixed(0)}% Coverage
                   </span>
                 </p>
-                <p className="text-sm mt-1">{riskLevel.description}</p>
+                <p className="text-sm mt-1">
+                  {riskLevel.description
+                    .replace(/ETH price increases/g, 'LINK price falls')
+                    .replace(/ETH can rise significantly/g, 'LINK can fall significantly')
+                    .replace(/monitor ETH price increases/g, 'monitor LINK price decreases')
+                    .replace(/liquidation if ETH rises further/g, 'liquidation if LINK falls further')
+                  }
+                </p>
                 {liquidationPrice > 0 && (
                   <p className="text-sm mt-2">
                     <strong>
@@ -844,6 +851,16 @@ export default function LeverageInterface({
                   <div className="flex justify-between">
                     <span className="text-gray-300">Coverage Ratio:</span>
                     <span className="text-emerald-300">{collateralizationRatio.toFixed(0)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Current LTV:</span>
+                    <span className={`font-semibold ${
+                      actualLTV > 60 ? 'text-red-300' : 
+                      actualLTV > 50 ? 'text-yellow-300' : 
+                      'text-green-300'
+                    }`}>
+                      {actualLTV.toFixed(1)}% / 65% max
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-300">Leverage Ratio:</span>
