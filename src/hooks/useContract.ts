@@ -1,5 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import { openLeveragePosition, closeLeveragePosition, addLiquidity, removeLiquidity, getErrorMessage, getUserLPBalance } from '@/lib/contract';
+import { 
+  openLeveragePosition, 
+  closeLeveragePosition, 
+  addUSDCLiquidity, 
+  removeUSDCLiquidity, 
+  borrowMoreUSDC,
+  getErrorMessage, 
+  getUserUSDCLPBalance,
+  getUserUSDCBalance
+} from '@/lib/contract';
 import { useAccount } from 'wagmi';
 
 
@@ -52,16 +61,7 @@ export const useContractOperations = () => {
     setError(null);
 
     try {
-      // In demo mode, update local storage
-      if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
-        const currentBalance = parseFloat(localStorage.getItem('demo_lp_balance') || '1.2500');
-        const newBalance = currentBalance + parseFloat(amount);
-        localStorage.setItem('demo_lp_balance', newBalance.toString());
-        // Return mock receipt
-        return { transactionHash: '0x1234567890abcdef...' };
-      }
-      
-      const receipt = await addLiquidity(amount);
+      const receipt = await addUSDCLiquidity(amount);
       return receipt;
     } catch (err: unknown) {
       const errorMessage = getErrorMessage(err);
@@ -77,16 +77,23 @@ export const useContractOperations = () => {
     setError(null);
 
     try {
-      // In demo mode, update local storage
-      if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
-        const currentBalance = parseFloat(localStorage.getItem('demo_lp_balance') || '1.2500');
-        const newBalance = Math.max(0, currentBalance - parseFloat(shares));
-        localStorage.setItem('demo_lp_balance', newBalance.toString());
-        // Return mock receipt
-        return { transactionHash: '0x1234567890abcdef...' };
-      }
-      
-      const receipt = await removeLiquidity(shares);
+      const receipt = await removeUSDCLiquidity(shares);
+      return receipt;
+    } catch (err: unknown) {
+      const errorMessage = getErrorMessage(err);
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBorrowMoreUSDC = async (additionalAmount: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const receipt = await borrowMoreUSDC(additionalAmount);
       return receipt;
     } catch (err: unknown) {
       const errorMessage = getErrorMessage(err);
@@ -102,6 +109,7 @@ export const useContractOperations = () => {
     closeLeveragePosition: handleCloseLeveragePosition,
     addLiquidity: handleAddLiquidity,
     removeLiquidity: handleRemoveLiquidity,
+    borrowMoreUSDC: handleBorrowMoreUSDC,
     loading,
     error
   };
@@ -116,20 +124,15 @@ export const useLPValue = () => {
   const fetchLPValue = useCallback(async () => {
     try {
       setLoading(true);
-      // For demo mode, simulate some LP balance
-      if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
-        // Simulate user having some LP tokens
-        const mockLPBalance = localStorage.getItem('demo_lp_balance') || '1.2500';
-        setLpValue(mockLPBalance);
-      } else if (address) {
-        // Use address-based contract function (getMyLPBalance removed for size optimization)
-        const lpBalance = await getUserLPBalance(address);
-        setLpValue(lpBalance.value);
+      if (address) {
+        // Get user's USDC LP token balance
+        const lpBalance = await getUserUSDCLPBalance(address);
+        setLpValue(lpBalance.balance);
       } else {
         setLpValue("0");
       }
     } catch (error) {
-      console.error("Error fetching LP value:", error);
+      console.error("Error fetching USDC LP value:", error);
       setLpValue("0");
     } finally {
       setLoading(false);
@@ -141,5 +144,36 @@ export const useLPValue = () => {
   }, [address, fetchLPValue]);
 
   return { lpValue, loading, refetch: fetchLPValue };
+};
+
+// Hook for USDC wallet balance
+export const useUSDCBalance = () => {
+  const [usdcBalance, setUsdcBalance] = useState<string>("0");
+  const [loading, setLoading] = useState(true);
+  const { address } = useAccount();
+
+  const fetchUSDCBalance = useCallback(async () => {
+    try {
+      setLoading(true);
+      if (address) {
+        // Get user's USDC wallet balance
+        const balance = await getUserUSDCBalance(address);
+        setUsdcBalance(balance.balance);
+      } else {
+        setUsdcBalance("0");
+      }
+    } catch (error) {
+      console.error("Error fetching USDC balance:", error);
+      setUsdcBalance("0");
+    } finally {
+      setLoading(false);
+    }
+  }, [address]);
+
+  useEffect(() => {
+    fetchUSDCBalance();
+  }, [address, fetchUSDCBalance]);
+
+  return { usdcBalance, loading, refetch: fetchUSDCBalance };
 };
 

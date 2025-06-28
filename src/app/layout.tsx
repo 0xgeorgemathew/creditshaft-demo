@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "CreditShaft - Turn Credit Card Into DeFi Collateral",
   description:
-    "Use your credit card as collateral for DeFi borrowing without KYC",
+    "Use your credit card as collateral for DeFi leverage without KYC",
 };
 
 export default function RootLayout({

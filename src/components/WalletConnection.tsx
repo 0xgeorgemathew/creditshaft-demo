@@ -8,6 +8,7 @@ import { avalancheFuji } from "@/config/web3";
 
 interface WalletConnectionProps {
   onWalletConnected: (address: string) => void;
+  compact?: boolean;
 }
 
 const getExplorerUrl = (chainId: number, address: string) => {
@@ -34,6 +35,7 @@ const getExplorerName = (chainId: number) => {
 
 export default function WalletConnection({
   onWalletConnected,
+  compact = false,
 }: WalletConnectionProps) {
   const { address, isConnected, isConnecting } = useAccount();
   const { connect, connectors, isPending } = useConnect();
@@ -52,7 +54,11 @@ export default function WalletConnection({
   }, [isConnected, address, onWalletConnected]);
 
   if (!hasMounted) {
-    return (
+    return compact ? (
+      <div className="h-[52px] flex items-center">
+        <div className="animate-pulse w-32 h-10 bg-white/20 rounded-lg"></div>
+      </div>
+    ) : (
       <div className="glassmorphism rounded-xl shadow-2xl p-8 border border-white/20">
         <div className="animate-pulse">
           <div className="h-8 bg-white/20 rounded mb-4"></div>
@@ -62,10 +68,47 @@ export default function WalletConnection({
     );
   }
 
+  // Compact version for header
+  if (compact) {
+    if (isConnected) {
+      return (
+        <div className="h-[52px] flex items-center">
+          <div className="flex items-center gap-2 glassmorphism border border-green-500/30 bg-gradient-to-r from-green-500/10 to-emerald-500/10 px-3 py-2 rounded-lg">
+            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            <span className="text-green-300 text-sm font-medium">Connected</span>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="h-[52px] flex items-center">
+        {connectors.length > 0 ? (
+          <button
+            onClick={() => connect({ connector: connectors[0] })}
+            disabled={isPending || isConnecting}
+            className="glassmorphism hover:bg-white/10 text-white px-3 sm:px-4 py-2 rounded-lg font-medium transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 border border-white/10 text-sm h-10"
+          >
+            <Wallet size={16} />
+            <span className="hidden sm:inline">Connect Wallet</span>
+            <span className="sm:hidden">Connect</span>
+            {(isPending || isConnecting) && (
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+            )}
+          </button>
+        ) : (
+          <div className="glassmorphism border border-yellow-500/30 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 px-3 py-2 rounded-lg">
+            <span className="text-yellow-300 text-sm">No Wallet</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="glassmorphism rounded-xl shadow-2xl p-8 border border-white/20 card-hover">
       <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+        <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
           <Wallet className="text-white" size={20} />
         </div>
         <h2 className="text-2xl font-bold gradient-text">
@@ -88,7 +131,7 @@ export default function WalletConnection({
                 className="w-full glassmorphism hover:bg-white/10 text-white py-4 px-6 rounded-xl font-semibold transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between border border-white/10 shadow-lg"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-400 rounded-lg flex items-center justify-center">
+                  <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
                     <Zap size={16} />
                   </div>
                   <span className="text-lg">{connector.name}</span>
@@ -110,9 +153,9 @@ export default function WalletConnection({
                     href="https://metamask.io/"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-yellow-100 hover:text-white text-sm flex items-center gap-2 transition-colors p-2 rounded-lg hover:bg-yellow-500/10"
+                    className="text-red-100 hover:text-white text-sm flex items-center gap-2 transition-colors p-2 rounded-lg hover:bg-red-500/10"
                   >
-                    <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+                    <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
                       <span className="text-xs font-bold">M</span>
                     </div>
                     Install MetaMask <ExternalLink size={14} />
@@ -121,7 +164,7 @@ export default function WalletConnection({
                     href="https://www.coinbase.com/wallet"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-yellow-100 hover:text-white text-sm flex items-center gap-2 transition-colors p-2 rounded-lg hover:bg-yellow-500/10"
+                    className="text-red-100 hover:text-white text-sm flex items-center gap-2 transition-colors p-2 rounded-lg hover:bg-red-500/10"
                   >
                     <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
                       <span className="text-xs font-bold">C</span>

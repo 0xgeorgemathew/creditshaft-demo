@@ -24,9 +24,9 @@ function Toast({ toast, onClose }: ToastProps) {
       case "success":
         return "border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 to-green-500/10 text-emerald-200";
       case "error":
-        return "border-rose-500/30 bg-gradient-to-r from-rose-500/10 to-red-500/10 text-rose-200";
+        return "border-red-500/30 bg-gradient-to-r from-red-500/10 to-red-600/10 text-red-200";
       case "info":
-        return "border-blue-500/30 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 text-blue-200";
+        return "border-blue-600/30 bg-gradient-to-r from-blue-600/10 to-blue-700/10 text-blue-200";
       default:
         return "border-gray-500/30 bg-gradient-to-r from-gray-500/10 to-slate-500/10 text-gray-200";
     }
@@ -37,9 +37,9 @@ function Toast({ toast, onClose }: ToastProps) {
       case "success":
         return <CheckCircle size={20} className="text-emerald-300" />;
       case "error":
-        return <XCircle size={20} className="text-rose-300" />;
+        return <XCircle size={20} className="text-red-400" />;
       case "info":
-        return <AlertCircle size={20} className="text-blue-300" />;
+        return <AlertCircle size={20} className="text-blue-400" />;
       default:
         return <AlertCircle size={20} className="text-gray-300" />;
     }

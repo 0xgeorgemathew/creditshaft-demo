@@ -1,24 +1,30 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useContractOperations, useLPValue } from "@/hooks/useContract";
-import { Droplets, Plus, Minus, TrendingUp, Loader2, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
+import { useContractOperations, useLPValue, useUSDCBalance } from "@/hooks/useContract";
+import { mintUSDC } from "@/lib/contract";
+import { useAccount } from "wagmi";
+import { Droplets, Plus, Minus, TrendingUp, Loader2, AlertTriangle, CheckCircle, XCircle, Zap } from "lucide-react";
 
 interface LiquidityProviderProps {
   walletAddress: string;
 }
 
 export default function LiquidityProvider({ walletAddress }: LiquidityProviderProps) {
+  const { address } = useAccount();
   const [addAmount, setAddAmount] = useState("");
   const [removeShares, setRemoveShares] = useState("");
   const [activeTab, setActiveTab] = useState<"add" | "remove">("add");
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [mintLoading, setMintLoading] = useState(false);
   
   const { addLiquidity, removeLiquidity, loading, error } = useContractOperations();
   const { lpValue, loading: lpLoading, refetch: refetchLP } = useLPValue();
+  const { usdcBalance, loading: usdcLoading, refetch: refetchUSDC } = useUSDCBalance();
 
   const hasLPBalance = parseFloat(lpValue || "0") > 0;
+  const hasUSDCBalance = parseFloat(usdcBalance || "0") > 0;
 
   // Auto-clear messages after 5 seconds
   useEffect(() => {
@@ -51,15 +57,24 @@ export default function LiquidityProvider({ walletAddress }: LiquidityProviderPr
       return;
     }
 
+    // Check if user has sufficient USDC balance
+    if (parseFloat(addAmount) > parseFloat(usdcBalance || "0")) {
+      setErrorMessage("Insufficient USDC balance");
+      return;
+    }
+
     setErrorMessage("");
     setSuccessMessage("");
 
     try {
       const receipt = await addLiquidity(addAmount);
       setAddAmount("");
-      // Force refresh the LP value
-      setTimeout(() => refetchLP(), 500);
-      setSuccessMessage(`Successfully added ${addAmount} ETH to the liquidity pool! Transaction: ${receipt.transactionHash.substring(0, 10)}...`);
+      // Force refresh both LP value and USDC balance
+      setTimeout(() => {
+        refetchLP();
+        refetchUSDC();
+      }, 500);
+      setSuccessMessage(`Successfully added ${addAmount} USDC to the liquidity pool! Transaction: ${receipt.transactionHash.substring(0, 10)}...`);
     } catch (error) {
       console.error("Error adding liquidity:", error);
       setErrorMessage((error as Error).message || "Failed to add liquidity");
@@ -77,12 +92,40 @@ export default function LiquidityProvider({ walletAddress }: LiquidityProviderPr
     try {
       const receipt = await removeLiquidity(removeShares);
       setRemoveShares("");
-      // Force refresh the LP value
-      setTimeout(() => refetchLP(), 500);
-      setSuccessMessage(`Successfully removed ${removeShares} ETH from the liquidity pool! Transaction: ${receipt.transactionHash.substring(0, 10)}...`);
+      // Force refresh both LP value and USDC balance
+      setTimeout(() => {
+        refetchLP();
+        refetchUSDC();
+      }, 500);
+      setSuccessMessage(`Successfully removed ${removeShares} LP tokens from the liquidity pool! Transaction: ${receipt.transactionHash.substring(0, 10)}...`);
     } catch (error) {
       console.error("Error removing liquidity:", error);
       setErrorMessage((error as Error).message || "Failed to remove liquidity");
+    }
+  };
+
+  const handleMintUSDC = async () => {
+    if (!address) {
+      setErrorMessage("Wallet not connected");
+      return;
+    }
+
+    setMintLoading(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const receipt = await mintUSDC(address);
+      // Force refresh USDC balance
+      setTimeout(() => {
+        refetchUSDC();
+      }, 500);
+      setSuccessMessage(`Successfully minted 1000 USDC! Transaction: ${receipt.transactionHash.substring(0, 10)}...`);
+    } catch (error) {
+      console.error("Error minting USDC:", error);
+      setErrorMessage((error as Error).message || "Failed to mint USDC");
+    } finally {
+      setMintLoading(false);
     }
   };
 
@@ -96,7 +139,7 @@ export default function LiquidityProvider({ walletAddress }: LiquidityProviderPr
           Liquidity Provider
         </h2>
         <p className="text-gray-300">
-          Add ETH to the lending pool and earn interest from borrowers
+          Add USDC to the lending pool and earn interest from borrowers
         </p>
       </div>
 
@@ -104,8 +147,8 @@ export default function LiquidityProvider({ walletAddress }: LiquidityProviderPr
       <div className="bg-white/5 rounded-xl p-6 mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-white mb-1">Your LP Value</h3>
-            <p className="text-gray-300 text-sm">Current value of your LP tokens</p>
+            <h3 className="text-lg font-semibold text-white mb-1">Your LP Tokens</h3>
+            <p className="text-gray-300 text-sm">Current balance of your LP tokens</p>
           </div>
           <div className="text-right">
             {lpLoading ? (
@@ -113,9 +156,9 @@ export default function LiquidityProvider({ walletAddress }: LiquidityProviderPr
             ) : (
               <>
                 <div className={`text-2xl font-bold ${hasLPBalance ? 'text-white' : 'text-gray-400'}`}>
-                  {parseFloat(lpValue || "0").toFixed(4)} ETH
+                  {parseFloat(lpValue || "0").toFixed(6)} LP
                 </div>
-                <div className="text-sm text-gray-400">≈ ${(parseFloat(lpValue || "0") * 2000).toFixed(2)}</div>
+                <div className="text-sm text-gray-400">≈ ${parseFloat(lpValue || "0").toFixed(2)} USDC</div>
                 {!hasLPBalance && (
                   <div className="text-xs text-gray-500 mt-1">No LP tokens</div>
                 )}
@@ -169,23 +212,66 @@ export default function LiquidityProvider({ walletAddress }: LiquidityProviderPr
         <div className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              ETH Amount to Add
+              USDC Amount to Add
             </label>
             <div className="relative">
               <input
                 type="number"
                 value={addAmount}
                 onChange={(e) => setAddAmount(e.target.value)}
-                placeholder="0.0"
-                step="0.01"
+                placeholder="0.000000"
+                step="0.000001"
                 min="0"
                 className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
               <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">
-                ETH
+                USDC
               </div>
             </div>
+            <div className="mt-2 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400 text-sm">Available:</span>
+                {usdcLoading ? (
+                  <Loader2 className="animate-spin text-blue-400" size={12} />
+                ) : (
+                  <span className={`text-sm font-medium ${hasUSDCBalance ? 'text-white' : 'text-gray-500'}`}>
+                    {parseFloat(usdcBalance || "0").toFixed(6)} USDC
+                  </span>
+                )}
+                <button
+                  onClick={handleMintUSDC}
+                  disabled={mintLoading || !address}
+                  className="ml-2 px-2 py-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs font-medium rounded-md hover:from-blue-600 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {mintLoading ? (
+                    <Loader2 className="animate-spin" size={10} />
+                  ) : (
+                    <Zap size={10} />
+                  )}
+                  Mint 1000
+                </button>
+              </div>
+              <button
+                onClick={() => setAddAmount(usdcBalance || '0')}
+                disabled={!hasUSDCBalance || usdcLoading}
+                className="text-blue-400 hover:text-blue-300 text-sm font-medium disabled:text-gray-500 disabled:cursor-not-allowed"
+              >
+                Max
+              </button>
+            </div>
           </div>
+
+          {!hasUSDCBalance && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle size={16} className="text-amber-400" />
+                <span className="text-amber-300 font-semibold">No USDC Balance</span>
+              </div>
+              <p className="text-amber-100 text-sm">
+                You don&apos;t have any USDC in your wallet. You need USDC to provide liquidity to the pool.
+              </p>
+            </div>
+          )}
 
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -199,7 +285,7 @@ export default function LiquidityProvider({ walletAddress }: LiquidityProviderPr
 
           <button
             onClick={handleAddLiquidity}
-            disabled={loading || !addAmount || parseFloat(addAmount) <= 0}
+            disabled={loading || !addAmount || parseFloat(addAmount) <= 0 || parseFloat(addAmount) > parseFloat(usdcBalance || "0")}
             className="w-full btn-gradient text-white py-4 px-6 rounded-xl font-bold text-lg shadow-lg hover:shadow-2xl transition-all transform hover:scale-105 disabled:opacity-50 disabled:transform-none disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
@@ -234,25 +320,25 @@ export default function LiquidityProvider({ walletAddress }: LiquidityProviderPr
           
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              LP Shares to Remove
+              LP Tokens to Remove
             </label>
             <div className="relative">
               <input
                 type="number"
                 value={removeShares}
                 onChange={(e) => setRemoveShares(e.target.value)}
-                placeholder="0.0"
-                step="0.01"
+                placeholder="0.000000"
+                step="0.000001"
                 min="0"
                 max={lpValue || '0'}
                 className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
               />
               <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">
-                Shares
+                LP
               </div>
             </div>
             <div className="mt-2 flex justify-between">
-              <span className="text-gray-400 text-sm">Available: {parseFloat(lpValue || "0").toFixed(4)} ETH</span>
+              <span className="text-gray-400 text-sm">Available: {parseFloat(lpValue || "0").toFixed(6)} LP</span>
               <button
                 onClick={() => setRemoveShares(lpValue || '0')}
                 className="text-blue-400 hover:text-blue-300 text-sm font-medium"
@@ -268,7 +354,7 @@ export default function LiquidityProvider({ walletAddress }: LiquidityProviderPr
               <span className="text-amber-300 font-semibold">Important</span>
             </div>
             <p className="text-amber-100 text-sm">
-              Removing liquidity will withdraw your ETH from the pool. Make sure there&apos;s sufficient liquidity for active borrowers.
+              Removing liquidity will withdraw your USDC from the pool. Make sure there&apos;s sufficient liquidity for active borrowers.
             </p>
           </div>
 

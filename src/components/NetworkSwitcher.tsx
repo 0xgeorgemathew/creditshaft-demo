@@ -11,7 +11,7 @@ const networks = [
     id: sepolia.id,
     name: "Sepolia",
     symbol: "ETH",
-    color: "from-blue-500 to-blue-600",
+    color: "from-blue-600 to-blue-700",
     explorer: "https://sepolia.etherscan.io",
     explorerName: "Etherscan",
   },

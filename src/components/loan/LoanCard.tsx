@@ -140,7 +140,7 @@ export const LoanCard = memo(
       >
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg">
               <DollarSign size={22} className="text-white" />
             </div>
             <div className="space-y-1">
@@ -192,10 +192,10 @@ export const LoanCard = memo(
         {loan.status === "active" && (
           <>
             <div className="grid grid-cols-2 gap-3 mb-6">
-              <div className="glassmorphism rounded-xl p-4 border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-orange-500/10">
+              <div className="glassmorphism rounded-xl p-4 border border-red-500/30 bg-gradient-to-br from-red-500/10 to-red-600/10">
                 <div className="flex items-center gap-2 mb-3">
-                  <TrendingUp size={14} className="text-amber-300" />
-                  <span className="text-amber-100 text-sm font-bold">
+                  <TrendingUp size={14} className="text-red-400" />
+                  <span className="text-red-200 text-sm font-bold">
                     Supplied LINK
                   </span>
                 </div>
@@ -203,10 +203,10 @@ export const LoanCard = memo(
                   {(parseFloat(loan.suppliedLINK) / 1e18).toFixed(4)}
                 </div>
               </div>
-              <div className="glassmorphism rounded-xl p-4 border border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-violet-500/10">
+              <div className="glassmorphism rounded-xl p-4 border border-blue-600/30 bg-gradient-to-br from-blue-600/10 to-blue-700/10">
                 <div className="flex items-center gap-2 mb-3">
-                  <DollarSign size={14} className="text-purple-300" />
-                  <span className="text-purple-100 text-sm font-bold">
+                  <DollarSign size={14} className="text-blue-600" />
+                  <span className="text-blue-200 text-sm font-bold">
                     Pre-Auth Charged
                   </span>
                 </div>

@@ -8,7 +8,6 @@ import {
   useCallback,
   useRef,
 } from "react";
-import { Loan } from "@/types";
 import {
   DollarSign,
   Loader,
@@ -26,7 +25,6 @@ import {
 import { useLoanStatus } from "@/hooks/useLoan";
 import { useContractOperations } from "@/hooks/useContract";
 import { useToast } from "@/hooks/useToast";
-import { LoanCard } from "@/components/loan/LoanCard";
 import { ToastContainer } from "@/components/loan/ToastSystem";
 import { getLINKPrice } from "@/lib/contract";
 
@@ -37,13 +35,15 @@ interface LoanDashboardProps {
 // Main dashboard component
 export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
   const { positionInfo, loading: contractLoading, refetch, isRealTimeActive } = useLoanStatus();
-  const { closeLeveragePosition: contractCloseLeveragePosition } = useContractOperations();
+  const { closeLeveragePosition: contractCloseLeveragePosition, borrowMoreUSDC: contractBorrowMoreUSDC } = useContractOperations();
   const [isProcessingPosition, setIsProcessingPosition] = useState(false);
+  const [isMakingUnsafe, setIsMakingUnsafe] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [currentLinkPrice, setCurrentLinkPrice] = useState<number>(0);
   const [priceLoading, setPriceLoading] = useState(true);
+  const [timeRemaining, setTimeRemaining] = useState(0);
 
   // Fetch current LINK price
   const fetchCurrentPrice = useCallback(async () => {
@@ -98,6 +98,9 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
     // Calculate time remaining until pre-auth expiry
     const timeRemaining = Math.max(0, position.preAuthExpiryTime - Math.floor(Date.now() / 1000));
     
+    // Calculate current LTV (Loan-to-Value ratio)
+    const currentLTV = currentSuppliedValue > 0 ? (borrowedUSDC / currentSuppliedValue) * 100 : 0;
+    
     return {
       collateralLINK,
       suppliedLINK,
@@ -114,28 +117,33 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
       healthFactor,
       timeRemaining,
       leverageRatio: position.leverageRatio / 100,
+      currentLTV,
       isAtRisk: healthFactor < 1.2, // Risk if health factor below 1.2
       priceChange: entryPrice > 0 ? ((currentLinkPrice - entryPrice) / entryPrice) * 100 : 0,
     };
   }, [positionInfo?.position, currentLinkPrice]);
 
-  // Memoize position data with optimized calculations
-  const currentPosition: Loan | null = useMemo(() => {
-    if (!positionInfo?.hasActivePosition || !positionInfo.position) return null;
+  // Initialize timeRemaining when positionMetrics changes
+  useEffect(() => {
+    if (positionMetrics?.timeRemaining !== undefined) {
+      setTimeRemaining(positionMetrics.timeRemaining);
+    }
+  }, [positionMetrics?.timeRemaining]);
 
-    const position = positionInfo.position;
+  // Real-time countdown timer
+  useEffect(() => {
+    if (!positionInfo?.hasActivePosition || timeRemaining <= 0) return;
 
-    // No processing needed - just pass through the position data with UI fields
+    const timer = setInterval(() => {
+      setTimeRemaining(prev => {
+        const newTime = prev - 1;
+        return newTime > 0 ? newTime : 0;
+      });
+    }, 1000);
 
-    return {
-      ...position,
-      id: walletAddress, // Using wallet address as ID for single position
-      walletAddress,
-      asset: "USDC", // Borrowed asset
-      status: position.isActive ? "active" : (position.preAuthCharged ? "defaulted" : "repaid"), // Simplified status
-      createdAt: new Date(position.openTimestamp * 1000).toISOString(),
-    };
-  }, [positionInfo?.position, positionInfo?.hasActivePosition, walletAddress]);
+    return () => clearInterval(timer);
+  }, [positionInfo?.hasActivePosition, timeRemaining]);
+
 
   const isLoading = contractLoading;
 
@@ -203,6 +211,58 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
       }
     },
     [addToast, contractCloseLeveragePosition, refetch]
+  );
+
+  const handleMakeUnsafe = useCallback(
+    async () => {
+      if (!positionMetrics) return;
+
+      // Calculate additional USDC needed to reach 67% LTV (above 65% threshold)
+      const targetLTV = 67; // 67% - above the 65% automation threshold
+      const currentSuppliedValue = positionMetrics.currentSuppliedValue;
+      const currentBorrowedUSDC = positionMetrics.borrowedUSDC;
+      const targetDebt = (currentSuppliedValue * targetLTV) / 100;
+      const additionalBorrow = targetDebt - currentBorrowedUSDC;
+
+      if (additionalBorrow <= 0) {
+        addToast(
+          "info",
+          "Position Already Unsafe",
+          "Position LTV is already above the safety threshold."
+        );
+        return;
+      }
+
+
+      addToast(
+        "info",
+        "Making Position Unsafe...",
+        `Borrowing additional $${additionalBorrow.toFixed(2)} USDC`
+      );
+
+      setIsMakingUnsafe(true);
+      try {
+        const receipt = await contractBorrowMoreUSDC(additionalBorrow.toFixed(2));
+
+        addToast(
+          "success",
+          "Position Made Unsafe!",
+          `Additional USDC borrowed. Transaction: ${receipt.transactionHash.substring(0, 10)}...`
+        );
+
+        // Refresh blockchain data
+        await refetch();
+      } catch (error) {
+        addToast(
+          "error",
+          "Failed to Make Unsafe",
+          (error as Error).message || "Failed to borrow additional USDC."
+        );
+      } finally {
+        setIsMakingUnsafe(false);
+      }
+    },
+    [positionMetrics, addToast, contractBorrowMoreUSDC, refetch]
   );
 
   useEffect(() => {
@@ -292,7 +352,7 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
 
             {/* Position Metrics Grid */}
             {positionMetrics && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                 {/* Current Price Card */}
                 <div className="glassmorphism rounded-xl p-4 border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-cyan-500/10">
                   <div className="flex items-center gap-2 mb-2">
@@ -383,6 +443,34 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                     {(((positionMetrics.currentPrice - positionMetrics.liquidationPrice) / positionMetrics.currentPrice) * 100).toFixed(1)}% buffer
                   </div>
                 </div>
+
+                {/* LTV Card */}
+                <div className={`glassmorphism rounded-xl p-4 border ${
+                  positionMetrics.currentLTV <= 60 
+                    ? 'border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10'
+                    : positionMetrics.currentLTV <= 80
+                    ? 'border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-orange-500/10'
+                    : 'border-red-500/20 bg-gradient-to-br from-red-500/10 to-pink-500/10'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <BarChart3 size={16} className={
+                      positionMetrics.currentLTV <= 60 ? "text-green-400" 
+                      : positionMetrics.currentLTV <= 80 ? "text-yellow-400" 
+                      : "text-red-400"
+                    } />
+                    <span className={`text-sm font-medium ${
+                      positionMetrics.currentLTV <= 60 ? "text-green-200" 
+                      : positionMetrics.currentLTV <= 80 ? "text-yellow-200" 
+                      : "text-red-200"
+                    }`}>Current LTV</span>
+                  </div>
+                  <div className="text-2xl font-bold text-white">
+                    {positionMetrics.currentLTV.toFixed(1)}%
+                  </div>
+                  <div className="text-sm text-gray-400">
+                    Liquidation at 85%
+                  </div>
+                </div>
               </div>
             )}
 
@@ -442,13 +530,16 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                       <span className="text-gray-300">Entry Price:</span>
                       <span className="text-white font-medium">${positionMetrics.entryPrice.toFixed(2)}</span>
                     </div>
-                    {positionMetrics.timeRemaining > 0 && (
+                    {timeRemaining > 0 && (
                       <div className="flex justify-between items-center">
                         <span className="text-gray-300">Time Remaining:</span>
                         <div className="flex items-center gap-1">
                           <Clock size={14} className="text-amber-400" />
-                          <span className="text-amber-300 font-medium">
-                            {Math.floor(positionMetrics.timeRemaining / 3600)}h {Math.floor((positionMetrics.timeRemaining % 3600) / 60)}m
+                          <span className={`font-medium ${timeRemaining < 3600 ? 'text-amber-300' : 'text-white'}`}>
+                            {timeRemaining >= 60 ? 
+                              `${Math.floor(timeRemaining / 3600)}h ${Math.floor((timeRemaining % 3600) / 60)}m ${timeRemaining % 60}s` :
+                              `${timeRemaining}s`
+                            }
                           </span>
                         </div>
                       </div>
@@ -485,6 +576,29 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                   </>
                 )}
               </button>
+              
+              {/* Make Unsafe Button - Only show when position is safe for testing */}
+              {positionMetrics && positionMetrics.currentLTV < 65 && (
+                <button
+                  onClick={handleMakeUnsafe}
+                  disabled={isMakingUnsafe}
+                  className="px-4 py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:from-gray-600 disabled:to-gray-700 text-white rounded-xl font-semibold transition-all transform hover:scale-105 disabled:hover:scale-100 flex items-center gap-2 shadow-lg text-sm"
+                  title="Testing: Borrow more USDC to trigger automation"
+                >
+                  {isMakingUnsafe ? (
+                    <>
+                      <Loader className="animate-spin" size={14} />
+                      Making Unsafe...
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle size={14} />
+                      Make Unsafe
+                    </>
+                  )}
+                </button>
+              )}
+              
               <button
                 onClick={debouncedRefetch}
                 disabled={isRefreshing}
@@ -497,20 +611,6 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                 )}
                 Refresh
               </button>
-            </div>
-
-            {/* Original Loan Card for detailed view */}
-            <div className="border-t border-white/10 pt-6">
-              <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                <BarChart3 size={18} className="text-blue-400" />
-                Detailed View
-              </h4>
-              <LoanCard
-                key={currentPosition!.id}
-                loan={currentPosition!}
-                onRepay={handleClosePosition}
-                isProcessing={isProcessingPosition}
-              />
             </div>
           </div>
         )}

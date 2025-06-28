@@ -5,7 +5,7 @@ import { Position, PositionStats } from "@/types";
 import { getPositionDetails, closeLeveragePosition, getLINKPrice } from "@/lib/contract";
 import { useAccount } from "wagmi";
 import { 
-    AlertCircle, BarChart3, Shield
+    AlertCircle
 } from "lucide-react";
 
 // Helper to calculate position stats with proper decimal handling
@@ -36,6 +36,9 @@ const calculateStats = (position: Position, currentLinkPrice: number): PositionS
 
     const now = Math.floor(Date.now() / 1000);
     const timeRemaining = position.preAuthExpiryTime - now;
+    
+    // Calculate current LTV (Loan-to-Value ratio)
+    const currentLTV = totalExposureUSD > 0 ? (borrowedUSDC / totalExposureUSD) * 100 : 0;
 
     return {
         collateralUSD: currentCollateralUSD,
@@ -47,6 +50,7 @@ const calculateStats = (position: Position, currentLinkPrice: number): PositionS
         liquidationPrice,
         healthFactor,
         timeRemaining,
+        currentLTV,
         isAtRisk: healthFactor < 1.1 // At risk if health factor < 1.1
     };
 };
@@ -59,6 +63,7 @@ export default function PositionDashboard() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isClosing, setIsClosing] = useState(false);
+    const [timeRemaining, setTimeRemaining] = useState(0);
 
     const fetchData = useCallback(async () => {
         if (!address) return;
@@ -71,11 +76,14 @@ export default function PositionDashboard() {
             setPosition(pos);
             setLinkPrice(price);
             if (pos && pos.isActive) {
-                setStats(calculateStats(pos, price));
+                const calculatedStats = calculateStats(pos, price);
+                setStats(calculatedStats);
+                setTimeRemaining(calculatedStats.timeRemaining);
             } else {
                 // Position is not active (closed), clear everything
                 setPosition(null);
                 setStats(null);
+                setTimeRemaining(0);
             }
             setError(null); // Clear any previous errors on successful fetch
         } catch (err: unknown) {
@@ -88,11 +96,24 @@ export default function PositionDashboard() {
         }
     }, [address, position]);
 
+    // Initial data fetch
     useEffect(() => {
         fetchData();
-        const interval = setInterval(fetchData, 30000); // Refresh every 30s
-        return () => clearInterval(interval);
     }, [fetchData]);
+
+    // Real-time countdown timer
+    useEffect(() => {
+        if (!stats || timeRemaining <= 0) return;
+
+        const timer = setInterval(() => {
+            setTimeRemaining(prev => {
+                const newTime = prev - 1;
+                return newTime > 0 ? newTime : 0;
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [stats, timeRemaining]);
 
     const handleClosePosition = async () => {
         setIsClosing(true);
@@ -139,7 +160,7 @@ export default function PositionDashboard() {
             <h2 className="text-4xl font-bold text-white mb-12 gradient-text">Position Dashboard</h2>
             
             {stats && (
-                <div className="grid md:grid-cols-3 gap-8 mb-8">
+                <div className="grid md:grid-cols-4 gap-6 mb-8">
                     <div className={`p-4 rounded-xl ${stats.unrealizedPnL >= 0 ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
                         <p className="text-sm text-gray-300">Unrealized P&L</p>
                         <p className={`text-2xl font-bold ${stats.unrealizedPnL >= 0 ? 'text-green-300' : 'text-red-300'}`}>${stats.unrealizedPnL.toFixed(2)}</p>
@@ -155,30 +176,13 @@ export default function PositionDashboard() {
                         <p className="text-2xl font-bold text-purple-300">${stats.liquidationPrice.toFixed(2)}</p>
                         <p className="text-sm text-purple-400">Current: ${linkPrice.toFixed(2)}</p>
                     </div>
-                </div>
-            )}
-
-            <div className="grid md:grid-cols-2 gap-8">
-                <div className="card-gradient p-6 rounded-xl border border-white/10">
-                    <h4 className="font-bold text-white text-xl mb-4 flex items-center gap-2"><BarChart3/> Position Details</h4>
-                    <div className="space-y-2 text-sm">
-                        <div className="flex justify-between"><span className="text-gray-300">Collateral:</span><span className="font-mono">{(parseFloat(position.collateralLINK) / 1e18).toFixed(4)} LINK</span></div>
-                        <div className="flex justify-between"><span className="text-gray-300">Leverage:</span><span className="font-mono">{position.leverageRatio / 100}x</span></div>
-                        <div className="flex justify-between"><span className="text-gray-300">Entry Price:</span><span className="font-mono">${(parseFloat(position.entryPrice) / 1e8).toFixed(2)}</span></div>
-                        <div className="flex justify-between"><span className="text-gray-300">Borrowed:</span><span className="font-mono">${(parseFloat(position.borrowedUSDC) / 1e6).toFixed(3)} USDC</span></div>
+                    <div className={`p-4 rounded-xl ${stats.currentLTV > 80 ? 'bg-red-500/10' : stats.currentLTV > 60 ? 'bg-amber-500/10' : 'bg-green-500/10'}`}>
+                        <p className="text-sm text-gray-300">Current LTV</p>
+                        <p className={`text-2xl font-bold ${stats.currentLTV > 80 ? 'text-red-300' : stats.currentLTV > 60 ? 'text-amber-300' : 'text-green-300'}`}>{stats.currentLTV.toFixed(1)}%</p>
+                        <p className="text-sm text-gray-400">Liquidation at 85%</p>
                     </div>
                 </div>
-                <div className="card-gradient p-6 rounded-xl border border-white/10">
-                    <h4 className="font-bold text-white text-xl mb-4 flex items-center gap-2"><Shield/> Pre-Auth Status</h4>
-                    {stats && (
-                        <div className="space-y-2 text-sm">
-                            <div className="flex justify-between"><span className="text-gray-300">Status:</span><span className={`font-bold ${position.isActive ? 'text-green-300' : 'text-amber-300'}`}>{position.isActive ? 'Active' : 'Closed'}</span></div>
-                            <div className="flex justify-between"><span className="text-gray-300">Amount:</span><span className="font-mono">${(parseFloat(position.preAuthAmount) / 1e6).toFixed(2)}</span></div>
-                            <div className="flex justify-between"><span className="text-gray-300">Time Remaining:</span><span className="font-mono">{stats.timeRemaining > 0 ? new Date(stats.timeRemaining * 1000).toISOString().substr(11, 8) : 'Expired'}</span></div>
-                        </div>
-                    )}
-                </div>
-            </div>
+            )}
 
             <div className="mt-8">
                 <button 

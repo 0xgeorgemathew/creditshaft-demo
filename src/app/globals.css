@@ -7,7 +7,7 @@
 
   body {
     @apply text-white;
-    background: linear-gradient(135deg, #0f172a 0%, #581c87 50%, #0f172a 100%);
+    background: linear-gradient(135deg, #0f172a 0%, #375bd2 50%, #0f172a 100%);
     min-height: 100vh;
     margin: 0;
     padding: 0;
@@ -24,7 +24,7 @@
 
 @layer components {
   .gradient-text {
-    @apply bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-blue-400 to-red-400 bg-clip-text text-transparent;
   }
 
   .card-hover {
@@ -38,14 +38,14 @@
   }
 
   .gradient-bg {
-    background: linear-gradient(135deg, #0f172a 0%, #581c87 50%, #0f172a 100%);
+    background: linear-gradient(135deg, #0f172a 0%, #375bd2 50%, #0f172a 100%);
   }
 
   .card-gradient {
     background: linear-gradient(
       135deg,
-      rgba(59, 130, 246, 0.1) 0%,
-      rgba(147, 51, 234, 0.1) 100%
+      rgba(55, 91, 210, 0.1) 0%,
+      rgba(232, 65, 66, 0.1) 100%
     );
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -58,7 +58,7 @@
   }
 
   .bg-dark-gradient {
-    background: linear-gradient(135deg, #0f172a 0%, #581c87 50%, #0f172a 100%);
+    background: linear-gradient(135deg, #0f172a 0%, #375bd2 50%, #0f172a 100%);
   }
 
   /* Layout stability utilities */
@@ -144,20 +144,24 @@
   box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
 }
 
-.glow-purple {
-  box-shadow: 0 0 20px rgba(147, 51, 234, 0.3);
+.glow-red {
+  box-shadow: 0 0 20px rgba(232, 65, 66, 0.3);
+}
+
+.glow-chainlink {
+  box-shadow: 0 0 20px rgba(55, 91, 210, 0.3);
 }
 
 /* Improved button styles */
 .btn-gradient {
-  background: linear-gradient(135deg, #3b82f6 0%, #9333ea 100%);
+  background: linear-gradient(135deg, #375bd2 0%, #e84142 100%);
   transition: all 0.3s ease;
 }
 
 .btn-gradient:hover {
-  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  background: linear-gradient(135deg, #2563eb 0%, #dc2626 100%);
   transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
+  box-shadow: 0 10px 25px rgba(55, 91, 210, 0.4);
 }
 
 /* Dynamic floating background orbs animations */
