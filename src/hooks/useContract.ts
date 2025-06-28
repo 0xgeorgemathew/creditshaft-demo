@@ -4,6 +4,7 @@ import {
   closeLeveragePosition, 
   addUSDCLiquidity, 
   removeUSDCLiquidity, 
+  borrowMoreUSDC,
   getErrorMessage, 
   getUserUSDCLPBalance,
   getUserUSDCBalance
@@ -87,11 +88,28 @@ export const useContractOperations = () => {
     }
   };
 
+  const handleBorrowMoreUSDC = async (additionalAmount: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const receipt = await borrowMoreUSDC(additionalAmount);
+      return receipt;
+    } catch (err: unknown) {
+      const errorMessage = getErrorMessage(err);
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return {
     openLeveragePosition: handleOpenLeveragePosition,
     closeLeveragePosition: handleCloseLeveragePosition,
     addLiquidity: handleAddLiquidity,
     removeLiquidity: handleRemoveLiquidity,
+    borrowMoreUSDC: handleBorrowMoreUSDC,
     loading,
     error
   };

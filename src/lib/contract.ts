@@ -42,6 +42,7 @@ export const CREDITSHAFT_ABI = [
   // Core functions
   "function openLeveragePosition(uint256 leverageRatio, uint256 collateralLINK, uint256 expiryTime, string stripePaymentIntentId, string stripeCustomerId, string stripePaymentMethodId) external",
   "function closeLeveragePosition() external", // New function for closing position
+  "function borrowMoreUSDC(uint256 additionalAmount) external", // Testing function to make position unsafe
   "function addLiquidity() external payable",
   "function removeLiquidity(uint256) external",
 
@@ -979,6 +980,63 @@ export const mintLINK = async (toAddress: string) => {
   } catch (error) {
     console.error("🔗 FAUCET MINT ERROR:", {
       function: "mintLINK",
+      error: error,
+      timestamp: new Date().toISOString(),
+    });
+    throw error;
+  }
+};
+
+// =============================================
+// TESTING FUNCTIONS
+// =============================================
+
+// Borrow additional USDC to make position unsafe (testing only)
+export const borrowMoreUSDC = async (additionalAmount: string) => {
+  try {
+    const contract = getContract();
+    
+    // Convert additional amount to proper decimals (6 decimals for USDC)
+    const additionalAmountWei = ethers.utils.parseUnits(additionalAmount, 6);
+
+    console.log("🔗 BLOCKCHAIN TRANSACTION INPUT:", {
+      function: "borrowMoreUSDC",
+      additionalAmount: additionalAmount,
+      additionalAmountWei: additionalAmountWei.toString(),
+      timestamp: new Date().toISOString(),
+    });
+
+    const tx = await contract.borrowMoreUSDC(additionalAmountWei);
+
+    console.log("🔗 BLOCKCHAIN TRANSACTION OBJECT:", {
+      hash: tx.hash,
+      from: tx.from,
+      to: tx.to,
+      gasLimit: tx.gasLimit?.toString(),
+      gasPrice: tx.gasPrice?.toString(),
+      nonce: tx.nonce,
+      data: tx.data,
+      value: tx.value?.toString(),
+    });
+
+    const receipt = await tx.wait();
+
+    console.log("🔗 BLOCKCHAIN TRANSACTION RECEIPT:", {
+      transactionHash: receipt.transactionHash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed?.toString(),
+      status: receipt.status,
+      events: receipt.events?.length || 0,
+    });
+
+    return receipt;
+  } catch (error) {
+    console.error("🔗 BLOCKCHAIN TRANSACTION ERROR:", {
+      function: "borrowMoreUSDC",
+      parameters: {
+        additionalAmount: additionalAmount,
+        additionalAmountWei: ethers.utils.parseUnits(additionalAmount, 6).toString(),
+      },
       error: error,
       timestamp: new Date().toISOString(),
     });

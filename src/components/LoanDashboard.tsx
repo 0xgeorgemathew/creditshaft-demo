@@ -35,8 +35,9 @@ interface LoanDashboardProps {
 // Main dashboard component
 export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
   const { positionInfo, loading: contractLoading, refetch, isRealTimeActive } = useLoanStatus();
-  const { closeLeveragePosition: contractCloseLeveragePosition } = useContractOperations();
+  const { closeLeveragePosition: contractCloseLeveragePosition, borrowMoreUSDC: contractBorrowMoreUSDC } = useContractOperations();
   const [isProcessingPosition, setIsProcessingPosition] = useState(false);
+  const [isMakingUnsafe, setIsMakingUnsafe] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -210,6 +211,58 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
       }
     },
     [addToast, contractCloseLeveragePosition, refetch]
+  );
+
+  const handleMakeUnsafe = useCallback(
+    async () => {
+      if (!positionMetrics) return;
+
+      // Calculate additional USDC needed to reach 67% LTV (above 65% threshold)
+      const targetLTV = 67; // 67% - above the 65% automation threshold
+      const currentSuppliedValue = positionMetrics.currentSuppliedValue;
+      const currentBorrowedUSDC = positionMetrics.borrowedUSDC;
+      const targetDebt = (currentSuppliedValue * targetLTV) / 100;
+      const additionalBorrow = targetDebt - currentBorrowedUSDC;
+
+      if (additionalBorrow <= 0) {
+        addToast(
+          "info",
+          "Position Already Unsafe",
+          "Position LTV is already above the safety threshold."
+        );
+        return;
+      }
+
+
+      addToast(
+        "info",
+        "Making Position Unsafe...",
+        `Borrowing additional $${additionalBorrow.toFixed(2)} USDC`
+      );
+
+      setIsMakingUnsafe(true);
+      try {
+        const receipt = await contractBorrowMoreUSDC(additionalBorrow.toFixed(2));
+
+        addToast(
+          "success",
+          "Position Made Unsafe!",
+          `Additional USDC borrowed. Transaction: ${receipt.transactionHash.substring(0, 10)}...`
+        );
+
+        // Refresh blockchain data
+        await refetch();
+      } catch (error) {
+        addToast(
+          "error",
+          "Failed to Make Unsafe",
+          (error as Error).message || "Failed to borrow additional USDC."
+        );
+      } finally {
+        setIsMakingUnsafe(false);
+      }
+    },
+    [positionMetrics, addToast, contractBorrowMoreUSDC, refetch]
   );
 
   useEffect(() => {
@@ -523,6 +576,29 @@ export default function LoanDashboard({ walletAddress }: LoanDashboardProps) {
                   </>
                 )}
               </button>
+              
+              {/* Make Unsafe Button - Only show when position is safe for testing */}
+              {positionMetrics && positionMetrics.currentLTV < 65 && (
+                <button
+                  onClick={handleMakeUnsafe}
+                  disabled={isMakingUnsafe}
+                  className="px-4 py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:from-gray-600 disabled:to-gray-700 text-white rounded-xl font-semibold transition-all transform hover:scale-105 disabled:hover:scale-100 flex items-center gap-2 shadow-lg text-sm"
+                  title="Testing: Borrow more USDC to trigger automation"
+                >
+                  {isMakingUnsafe ? (
+                    <>
+                      <Loader className="animate-spin" size={14} />
+                      Making Unsafe...
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle size={14} />
+                      Make Unsafe
+                    </>
+                  )}
+                </button>
+              )}
+              
               <button
                 onClick={debouncedRefetch}
                 disabled={isRefreshing}

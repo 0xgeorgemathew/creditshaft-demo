@@ -5,16 +5,16 @@ import { CreditCard, Wallet, DollarSign, Zap } from "lucide-react";
 
 interface PreAuthStatusProps {
   preAuthData: PreAuthData;
-  onBorrow: () => void;
+  onLeverage: () => void;
   hasActiveLoans?: boolean;
 }
 
 export default function PreAuthStatus({
   preAuthData,
-  onBorrow,
+  onLeverage,
   hasActiveLoans = false,
 }: PreAuthStatusProps) {
-  const maxBorrowAmount = Math.floor(preAuthData.available_credit * 0.8); // 80% LTV
+  const maxLeverageAmount = Math.floor(preAuthData.available_credit * 0.65); // 65% LTV
 
   return (
     <div className="glassmorphism rounded-2xl shadow-2xl p-8 border border-white/20">
@@ -108,11 +108,11 @@ export default function PreAuthStatus({
                 <Zap className="text-white" size={20} />
               </div>
               <span className="text-lg font-semibold text-white">
-                Maximum Borrow Capacity
+                Maximum Leverage Capacity
               </span>
             </div>
             <p className="text-3xl font-bold text-blue-400 mb-2">
-              ${maxBorrowAmount.toLocaleString()}
+              ${maxLeverageAmount.toLocaleString()}
             </p>
             <p className="text-sm text-gray-300 mb-4">
               Any crypto asset (USDC, USDT, DAI, ETH, BTC)
@@ -124,14 +124,14 @@ export default function PreAuthStatus({
       {/* Start Borrowing Section */}
       <div className="mt-8 text-center">
         <button
-          onClick={onBorrow}
+          onClick={onLeverage}
           className="btn-gradient text-white py-4 px-8 rounded-xl font-bold text-xl shadow-lg hover:shadow-2xl transition-all transform hover:scale-105 flex items-center justify-center gap-3 mx-auto"
         >
           <Zap size={24} />
-          Start Borrowing
+          Start Leveraging
         </button>
         <p className="text-gray-400 text-sm mt-3">
-          Ready to borrow any crypto asset against your credit limit
+          Ready to leverage any crypto asset against your credit limit
         </p>
       </div>
 
@@ -142,7 +142,7 @@ export default function PreAuthStatus({
         <div className="grid md:grid-cols-2 gap-4 text-sm text-blue-200">
           <div className="flex items-start gap-3">
             <span className="text-blue-400 mt-1 font-bold">1.</span>
-            <span>Choose your crypto asset and borrow amount</span>
+            <span>Choose your crypto asset and leverage amount</span>
           </div>
           <div className="flex items-start gap-3">
             <span className="text-blue-400 mt-1 font-bold">2.</span>
@@ -150,7 +150,7 @@ export default function PreAuthStatus({
           </div>
           <div className="flex items-start gap-3">
             <span className="text-blue-400 mt-1 font-bold">3.</span>
-            <span>Interest accrues on borrowed amounts</span>
+            <span>Interest accrues on leveraged amounts</span>
           </div>
           <div className="flex items-start gap-3">
             <span className="text-blue-400 mt-1 font-bold">4.</span>

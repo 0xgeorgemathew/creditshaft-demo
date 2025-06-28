@@ -23,15 +23,15 @@ import { useContractOperations } from "@/hooks/useContract";
 import { getLINKPrice, mintLINK } from "@/lib/contract"; // Import getLINKPrice and mintLINK
 import { useAccount } from "wagmi";
 
-interface BorrowingInterfaceProps {
+interface LeverageInterfaceProps {
   preAuthData: PreAuthData;
-  onBorrowSuccess?: () => void;
+  onLeverageSuccess?: () => void;
 }
 
-export default function BorrowingInterface({
+export default function LeverageInterface({
   preAuthData,
-  onBorrowSuccess,
-}: BorrowingInterfaceProps) {
+  onLeverageSuccess,
+}: LeverageInterfaceProps) {
   const { address } = useAccount();
   const { openLeveragePosition, loading: contractLoading } = useContractOperations();
   const [linkPrice, setLinkPrice] = useState(0); // No fallback price - must fetch from contract
@@ -44,7 +44,7 @@ export default function BorrowingInterface({
   const [mintLoading, setMintLoading] = useState(false);
   const [mintMessage, setMintMessage] = useState("");
   const isLoading = isProcessing || contractLoading;
-  const [borrowSuccess, setBorrowSuccess] = useState(false);
+  const [leverageSuccess, setLeverageSuccess] = useState(false);
   const [txHash, setTxHash] = useState("");
   const [loanId, setLoanId] = useState("");
   const [countdown, setCountdown] = useState(3);
@@ -80,25 +80,25 @@ export default function BorrowingInterface({
   }, [fetchLinkPrice]);
 
   const handleRedirect = useCallback(() => {
-    if (onBorrowSuccess) {
-      onBorrowSuccess();
+    if (onLeverageSuccess) {
+      onLeverageSuccess();
     } else {
       // Fallback: redirect to main page with a URL parameter
       window.location.href = "/?tab=manage";
     }
-  }, [onBorrowSuccess]);
+  }, [onLeverageSuccess]);
 
   // Countdown timer for auto-redirect
   useEffect(() => {
-    if (borrowSuccess && countdown > 0) {
+    if (leverageSuccess && countdown > 0) {
       const timer = setTimeout(() => {
         setCountdown(countdown - 1);
       }, 1000);
       return () => clearTimeout(timer);
-    } else if (borrowSuccess && countdown === 0) {
+    } else if (leverageSuccess && countdown === 0) {
       handleRedirect();
     }
-  }, [borrowSuccess, countdown, handleRedirect]);
+  }, [leverageSuccess, countdown, handleRedirect]);
 
   // Max LINK collateral (no direct credit limit for LINK, but for pre-auth)
   // For now, we'll use a high arbitrary number or user's LINK balance if available
@@ -148,7 +148,7 @@ export default function BorrowingInterface({
     return getCollateralizationRatio(totalSuppliedLINK * linkPrice, borrowedUSDC);
   }, [totalSuppliedLINK, borrowedUSDC, linkPrice]);
 
-  const handleBorrow = async () => {
+  const handleLeverage = async () => {
     setIsProcessing(true);
 
     try {
@@ -210,14 +210,14 @@ export default function BorrowingInterface({
       setTxHash(receipt.transactionHash);
       // Loan ID might be an event parameter, for now, use tx hash or a placeholder
       setLoanId(receipt.transactionHash.substring(0, 10) + "..."); 
-      setBorrowSuccess(true);
+      setLeverageSuccess(true);
       setCountdown(3);
       
     } catch (error) {
-      console.error("Borrowing failed:", error);
+      console.error("Leverage failed:", error);
       const errorMessage = (error as Error).message;
       
-      alert("Borrowing failed: " + errorMessage);
+      alert("Leverage failed: " + errorMessage);
     } finally {
       setIsProcessing(false);
     }
@@ -251,17 +251,17 @@ export default function BorrowingInterface({
     }
   };
 
-  if (borrowSuccess) {
+  if (leverageSuccess) {
     return (
       <div className="glassmorphism rounded-2xl p-8 border border-green-500/30 bg-gradient-to-br from-green-500/10 to-emerald-500/10">
         <div className="text-center">
           <CheckCircle className="text-green-400 mx-auto mb-4" size={48} />
           <h2 className="text-3xl font-bold text-green-300 mb-4">
-            Loan Successful!
+            Leverage Position Successful!
           </h2>
 
           <div className="glassmorphism rounded-xl p-6 mb-6 max-w-md mx-auto border border-white/20">
-            <p className="text-sm text-gray-300 mb-2">You borrowed:</p>
+            <p className="text-sm text-gray-300 mb-2">You leveraged:</p>
             <p className="text-3xl font-bold text-green-400">
               ${borrowedUSDC.toFixed(2)} {selectedAsset}
             </p>
@@ -343,7 +343,7 @@ export default function BorrowingInterface({
                 className="flex-1 btn-gradient text-white py-3 px-4 rounded-xl font-semibold transition-all transform hover:scale-105 flex items-center justify-center gap-2"
               >
                 <CreditCard size={16} />
-                View My Loans
+                View My Positions
               </button>
             </div>
 
@@ -351,7 +351,7 @@ export default function BorrowingInterface({
               <p className="text-xs text-gray-400">
                 {countdown > 0 ? (
                   <>
-                    Automatically redirecting to loan management in{" "}
+                    Automatically redirecting to position management in{" "}
                     <span className="text-blue-300 font-bold">{countdown}</span>{" "}
                     seconds
                   </>
@@ -369,7 +369,7 @@ export default function BorrowingInterface({
   return (
     <div className="glassmorphism rounded-2xl shadow-2xl p-8 border border-white/20">
       <h2 className="text-3xl font-bold text-white mb-8 gradient-text">
-        Open Leveraged Position
+        Leverage
       </h2>
 
       <div className="grid md:grid-cols-2 gap-8">
@@ -418,7 +418,7 @@ export default function BorrowingInterface({
               {linkCollateralAmountValue > 0 && (
                 <div className="space-y-1">
                   <p className="text-sm text-green-300 font-semibold">
-                    You will borrow: ${borrowedUSDC.toFixed(2)} USDC
+                    You will get: ${borrowedUSDC.toFixed(2)} USDC
                   </p>
                   <p className="text-sm text-blue-300">
                     At {selectedLeverageRatio / 100}x Leverage • LINK Price: ${linkPrice.toLocaleString()}
@@ -525,7 +525,7 @@ export default function BorrowingInterface({
                 <div className="flex items-center gap-2">
                   <BarChart3 size={12} className="text-green-400" />
                   <span>
-                    With {linkCollateralAmountValue.toFixed(2)} LINK collateral → {totalSuppliedLINK.toFixed(2)} LINK exposure, you borrow ${borrowedUSDC.toFixed(2)} USDC
+                    With {linkCollateralAmountValue.toFixed(2)} LINK collateral → {totalSuppliedLINK.toFixed(2)} LINK exposure, you get ${borrowedUSDC.toFixed(2)} USDC
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -753,7 +753,7 @@ export default function BorrowingInterface({
             )}
 
           <button
-            onClick={handleBorrow}
+            onClick={handleLeverage}
             disabled={
               !linkCollateralAmount ||
               linkCollateralAmountValue <= 0 ||
@@ -768,7 +768,7 @@ export default function BorrowingInterface({
             {isLoading ? (
               <>
                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                Processing Loan...
+                Processing Position...
               </>
             ) : (
               <>
@@ -830,7 +830,7 @@ export default function BorrowingInterface({
                     </span>
                   </div>
                   <div className="flex justify-between font-semibold">
-                    <span className="text-gray-200">USDC You&apos;ll Borrow:</span>
+                    <span className="text-gray-200">USDC You&apos;ll Get:</span>
                     <span className="text-blue-300">
                       ${borrowedUSDC.toFixed(2)} {selectedAsset}
                     </span>
@@ -886,11 +886,11 @@ export default function BorrowingInterface({
                   size={14}
                   className="text-blue-400 mt-0.5 flex-shrink-0"
                 />
-                <span>Choose leverage ratio to determine borrowing power</span>
+                <span>Choose leverage ratio to determine position power</span>
               </li>
               <li className="flex items-start gap-2">
                 <Zap size={14} className="text-blue-400 mt-0.5 flex-shrink-0" />
-                <span>Instant transfer of borrowed USDC to your wallet</span>
+                <span>Instant transfer of USDC to your wallet</span>
               </li>
               <li className="flex items-start gap-2">
                 <TrendingUp
@@ -917,7 +917,7 @@ export default function BorrowingInterface({
             <div className="space-y-3 text-sm text-amber-200">
               <p>
                 This demo uses Sepolia testnet with Chainlink price feeds for LINK
-                collateral and USDC borrowing. Real-time liquidation monitoring ensures loan safety.
+                collateral and USDC borrowing. Real-time liquidation monitoring ensures position safety.
                 Use test card 4242424242424242 for payments.
               </p>
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 mt-3">

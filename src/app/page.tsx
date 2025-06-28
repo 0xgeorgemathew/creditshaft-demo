@@ -5,7 +5,7 @@ import { useAccount } from "wagmi";
 import WalletConnection from "@/components/WalletConnection";
 import StripePreAuth from "@/components/StripePreAuth";
 import PreAuthStatus from "@/components/PreAuthStatus";
-import BorrowingInterface from "@/components/BorrowingInterface";
+import LeverageInterface from "@/components/LeverageInterface";
 import LoanDashboard from "@/components/LoanDashboard";
 import LiquidityProvider from "@/components/LiquidityProvider";
 import NetworkSwitcher from "@/components/NetworkSwitcher";
@@ -17,11 +17,11 @@ import { Zap, Shield, TrendingUp, Sparkles, CreditCard, Droplets } from "lucide-
 const PREAUTH_STORAGE_KEY = "creditshaft_preauth_data";
 
 // Valid tab types
-type TabType = "overview" | "borrow" | "manage" | "setup" | "liquidity";
+type TabType = "overview" | "leverage" | "manage" | "setup" | "liquidity";
 
 // Helper function to validate tab type
 const isValidTab = (tab: string): tab is TabType => {
-  return ["overview", "borrow", "manage", "setup", "liquidity"].includes(tab as TabType);
+  return ["overview", "leverage", "manage", "setup", "liquidity"].includes(tab as TabType);
 };
 
 export default function Home() {
@@ -105,7 +105,7 @@ export default function Home() {
       if (savedPreAuth) {
         setPreAuthData(savedPreAuth);
 
-        // Check if user was in the middle of borrowing or managing loans
+        // Check if user was in the middle of leveraging or managing loans
         const lastActiveTab = loadFromSession<string>(`tab_${address}`) || "overview";
         if (isValidTab(lastActiveTab)) {
           setActiveTab(lastActiveTab);
@@ -187,22 +187,22 @@ export default function Home() {
     setActiveTab("overview");
   };
 
-  const handleBorrow = () => {
-    // Only proceed to borrow tab if pre-auth data exists
+  const handleLeverage = () => {
+    // Only proceed to leverage tab if pre-auth data exists
     if (preAuthData) {
-      setActiveTab("borrow");
+      setActiveTab("leverage");
     } else {
       // If no pre-auth data, user needs to set up card first
-      // This shouldn't happen since borrow button only shows when pre-auth exists
+      // This shouldn't happen since leverage button only shows when pre-auth exists
       // But adding as safety measure
       setActiveTab("overview");
     }
   };
 
-  const handleBorrowSuccess = () => {
+  const handleLeverageSuccess = () => {
     setActiveTab("manage");
 
-    // Check for active loans after successful borrow
+    // Check for active loans after successful leverage
     checkActiveLoans();
   };
 
@@ -219,29 +219,35 @@ export default function Home() {
       <header className="relative z-10 border-b border-white/10 backdrop-blur-lg bg-white/5">
         <div className="w-full px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6 max-w-7xl">
+            {/* Left side - Logo and Demo badge */}
+            <div className="flex items-center gap-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg glow-blue">
                   <Zap className="text-white" size={24} />
                 </div>
-                <h1 className="text-3xl font-bold text-white">
+                <h1 className="text-2xl sm:text-3xl font-bold text-white">
                   <span className="gradient-text">Credit</span>Shaft
                 </h1>
               </div>
-              <div className="text-sm text-gray-300 bg-white/10 px-3 py-1 rounded-full backdrop-blur">
+              <div className="hidden sm:flex text-sm text-gray-300 bg-white/10 px-3 py-1 rounded-full backdrop-blur">
                 <Sparkles className="inline w-4 h-4 mr-1" />
                 Chromion Hackathon Demo
               </div>
             </div>
             
-            {isConnected && (
-              <div className="flex items-center gap-4">
-                <WalletAddress />
-                <div className="relative">
-                  <NetworkSwitcher />
-                </div>
-              </div>
-            )}
+            {/* Right side - Wallet Connection, Address and Network Switcher */}
+            <div className="flex items-center gap-2 sm:gap-4">
+              {isConnected ? (
+                <>
+                  <WalletAddress />
+                  <div className="relative">
+                    <NetworkSwitcher />
+                  </div>
+                </>
+              ) : (
+                <WalletConnection onWalletConnected={handleWalletConnected} compact={true} />
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -259,7 +265,7 @@ export default function Home() {
                 </span>
               </h2>
               <p className="text-xl md:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed">
-                Borrow crypto instantly using your credit card as collateral. No
+                Leverage crypto instantly using your credit card as collateral. No
                 KYC, no identity verification, completely permissionless.
               </p>
             </div>
@@ -270,10 +276,10 @@ export default function Home() {
                   <Zap className="text-white" size={32} />
                 </div>
                 <h3 className="text-xl font-bold text-white mb-4">
-                  Instant Borrowing
+                  Instant Leveraging
                 </h3>
                 <p className="text-gray-300 leading-relaxed">
-                  Get crypto loans in seconds using credit card
+                  Get crypto leverage in seconds using credit card
                   pre-authorization. No waiting, no approvals.
                 </p>
               </div>
@@ -296,10 +302,10 @@ export default function Home() {
                   <TrendingUp className="text-white" size={32} />
                 </div>
                 <h3 className="text-xl font-bold text-white mb-4">
-                  80% LTV Ratio
+                  65% Max LTV
                 </h3>
                 <p className="text-gray-300 leading-relaxed">
-                  Borrow up to 80% of your credit card limit with competitive
+                  Leverage up to 65% of your credit card limit with competitive
                   rates.
                 </p>
               </div>
@@ -324,14 +330,7 @@ export default function Home() {
 
         {/* Main Flow */}
         <div className="space-y-8">
-          {/* Step 1: Wallet Connection */}
-          {!isConnected && (
-            <div className="transform transition-all duration-500 animate-fade-in">
-              <WalletConnection onWalletConnected={handleWalletConnected} />
-            </div>
-          )}
-
-          {/* Step 2: Main Interface (always show when connected) */}
+          {/* Main Interface */}
           {isConnected && address && (
             <div className="transform transition-all duration-500 animate-fade-in">
               {!preAuthData ? (
@@ -357,19 +356,19 @@ export default function Home() {
                         <CreditCard className="text-white" size={24} />
                       </div>
                       <h3 className="text-xl font-bold text-white mb-3">
-                        Borrow Crypto
+                        Leverage Crypto
                       </h3>
                       <p className="text-gray-300 mb-4 leading-relaxed">
-                        Use your credit card as collateral to borrow crypto instantly. No KYC required.
+                        Use your credit card as collateral to leverage crypto instantly. No KYC required.
                       </p>
                       <div className="space-y-2 mb-6">
                         <div className="flex items-center gap-2 text-sm text-gray-300">
                           <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
-                          Up to 66.7% LTV ratio
+                          Max LTV is 65%
                         </div>
                         <div className="flex items-center gap-2 text-sm text-gray-300">
                           <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
-                          Instant borrowing
+                          Instant leveraging
                         </div>
                         <div className="flex items-center gap-2 text-sm text-gray-300">
                           <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
@@ -437,15 +436,15 @@ export default function Home() {
                         Overview
                       </button>
                       <button
-                        onClick={() => setActiveTab("borrow")}
+                        onClick={() => setActiveTab("leverage")}
                         className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-                          activeTab === "borrow"
+                          activeTab === "leverage"
                             ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white"
                             : "text-gray-300 hover:text-white hover:bg-white/10"
                         }`}
                       >
                         <Zap size={16} />
-                        Borrow
+                        Leverage
                       </button>
                       <button
                         onClick={() => setActiveTab("manage")}
@@ -456,7 +455,7 @@ export default function Home() {
                         }`}
                       >
                         <CreditCard size={16} />
-                        Manage Loans
+                        Manage
                       </button>
                       <button
                         onClick={() => setActiveTab("liquidity")}
@@ -476,15 +475,15 @@ export default function Home() {
                   {activeTab === "overview" && (
                     <PreAuthStatus
                       preAuthData={preAuthData}
-                      onBorrow={handleBorrow}
+                      onLeverage={handleLeverage}
                       hasActiveLoans={hasActiveLoans}
                     />
                   )}
 
-                  {activeTab === "borrow" && (
-                    <BorrowingInterface
+                  {activeTab === "leverage" && (
+                    <LeverageInterface
                       preAuthData={preAuthData}
-                      onBorrowSuccess={handleBorrowSuccess}
+                      onLeverageSuccess={handleLeverageSuccess}
                     />
                   )}
 
