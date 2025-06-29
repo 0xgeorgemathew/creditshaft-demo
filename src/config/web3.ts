@@ -13,7 +13,7 @@ const avalancheFuji = defineChain({
   },
   rpcUrls: {
     default: {
-      http: ["https://api.avax-test.network/ext/bc/C/rpc"],
+      http: ["https://avax-fuji.g.alchemy.com/v2/5NIZupGMAK990bNPC95clhTZBkvw4BrE"],
     },
   },
   blockExplorers: {

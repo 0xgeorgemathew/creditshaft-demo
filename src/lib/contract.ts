@@ -63,51 +63,64 @@ export const CREDITSHAFT_ABI = [
 ];
 
 // Contract addresses - Update these with actual deployed addresses
-export const CONTRACT_ADDRESSES = {
+export const CONTRACT_ADDRESSES: Record<number, string> = {
   [sepolia.id]:
+    process.env.NEXT_PUBLIC_CREDIT_SHAFT_LEVERAGE_SEPOLIA ||
     process.env.NEXT_PUBLIC_CREDIT_SHAFT_LEVERAGE ||
     "0xCDeB461C501aDE6b384520D27a5A4F34C41aE512", // New CreditShaftLeverage address
   [avalancheFuji.id]:
-    process.env.NEXT_PUBLIC_CREDIT_SHAFT_LEVERAGE ||
-    "0x0000000000000000000000000000000000000000", // Default fallback
+    process.env.NEXT_PUBLIC_CREDIT_SHAFT_LEVERAGE_FUJI ||
+    "0x45452AeeA6f332fC8A846e082a4f8Af00E43A41e", // Fuji CreditShaftLeverage address
 };
 
 // CreditShaftCore addresses for USDC liquidity
-export const CREDITSHAFT_CORE_ADDRESSES = {
+export const CREDITSHAFT_CORE_ADDRESSES: Record<number, string> = {
   [sepolia.id]:
+    process.env.NEXT_PUBLIC_CREDIT_SHAFT_CORE_SEPOLIA ||
     process.env.NEXT_PUBLIC_CREDIT_SHAFT_CORE ||
     "0x616d95839a1bD4963bBe9cE54f516bd5DfE47E01",
   [avalancheFuji.id]:
-    process.env.NEXT_PUBLIC_CREDIT_SHAFT_CORE ||
-    "0x0000000000000000000000000000000000000000", // Default fallback
+    process.env.NEXT_PUBLIC_CREDIT_SHAFT_CORE_FUJI ||
+    "0xdE9DeB7BBEF3d07F3fB0a2c6f86C763a16F650C5", // Fuji CreditShaftCore address
 };
 
 // USDC Token addresses
-export const USDC_ADDRESSES = {
+export const USDC_ADDRESSES: Record<number, string> = {
   [sepolia.id]:
+    process.env.NEXT_PUBLIC_USDC_ADDRESS_SEPOLIA ||
     process.env.NEXT_PUBLIC_USDC_ADDRESS ||
     "0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8",
   [avalancheFuji.id]:
-    process.env.NEXT_PUBLIC_USDC_ADDRESS ||
-    "0x0000000000000000000000000000000000000000", // Default fallback
+    process.env.NEXT_PUBLIC_USDC_ADDRESS_FUJI ||
+    "0xCaC7Ffa82c0f43EBB0FC11FCd32123EcA46626cf", // Fuji USDC address
 };
 
 // SimplifiedLPToken addresses
-export const LP_TOKEN_ADDRESSES = {
+export const LP_TOKEN_ADDRESSES: Record<number, string> = {
   [sepolia.id]:
+    process.env.NEXT_PUBLIC_SIMPLIFIED_LP_TOKEN_SEPOLIA ||
     process.env.NEXT_PUBLIC_SIMPLIFIED_LP_TOKEN ||
     "0xA45F77831dbc29C04D2A9a197e80b5dFD67B055f",
   [avalancheFuji.id]:
-    process.env.NEXT_PUBLIC_SIMPLIFIED_LP_TOKEN ||
-    "0x0000000000000000000000000000000000000000", // Default fallback
+    process.env.NEXT_PUBLIC_SIMPLIFIED_LP_TOKEN_FUJI ||
+    "0x66cE597C2D42B3D04cdea5bf2cDbd112b9483318", // Fuji SimplifiedLPToken address
 };
 
-export const LINK_TOKEN_ADDRESS =
-  process.env.NEXT_PUBLIC_LINK_TOKEN ||
-  "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5";
+// LINK Token addresses
+export const LINK_TOKEN_ADDRESSES: Record<number, string> = {
+  [sepolia.id]:
+    process.env.NEXT_PUBLIC_LINK_TOKEN ||
+    "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5", // Sepolia LINK address
+  [avalancheFuji.id]:
+    process.env.NEXT_PUBLIC_LINK_TOKEN ||
+    "0x3A38c4d0444b5fFcc5323b2e86A21aBaaf5FbF26", // Fuji LINK address
+};
 
-// Faucet contract address
-export const FAUCET_ADDRESS = "0xC959483DBa39aa9E78757139af0e9a2EDEb3f42D";
+// Faucet contract addresses
+export const FAUCET_ADDRESSES: Record<number, string> = {
+  [sepolia.id]: "0xC959483DBa39aa9E78757139af0e9a2EDEb3f42D",
+  [avalancheFuji.id]: "0xBCcD21ae43139bEF545e72e20E78f039A3Ac1b96", // Fuji faucet address
+};
 
 // Faucet ABI
 export const FAUCET_ABI = [
@@ -118,68 +131,80 @@ export const FAUCET_ABI = [
 ];
 
 // Simplified contract instance getter
-export const getContract = () => {
+export const getContract = async () => {
   if (typeof window === "undefined" || !window.ethereum) {
     throw new Error("Web3 provider not available");
   }
 
   const provider = new ethers.providers.Web3Provider(window.ethereum);
   const signer = provider.getSigner();
-  const address = CONTRACT_ADDRESSES[sepolia.id]; // Use Sepolia by default
+  const network = await provider.getNetwork();
+  const chainId = network.chainId;
+  
+  const address = CONTRACT_ADDRESSES[chainId];
 
   if (!address || address === "0x0000000000000000000000000000000000000000") {
-    throw new Error("Contract not deployed");
+    throw new Error("Contract not deployed on this network");
   }
 
   return new ethers.Contract(address, CREDITSHAFT_ABI, signer);
 };
 
 // Get CreditShaftCore contract instance
-export const getCreditShaftCoreContract = () => {
+export const getCreditShaftCoreContract = async () => {
   if (typeof window === "undefined" || !window.ethereum) {
     throw new Error("Web3 provider not available");
   }
 
   const provider = new ethers.providers.Web3Provider(window.ethereum);
   const signer = provider.getSigner();
-  const address = CREDITSHAFT_CORE_ADDRESSES[sepolia.id]; // Use Sepolia by default
+  const network = await provider.getNetwork();
+  const chainId = network.chainId;
+  
+  const address = CREDITSHAFT_CORE_ADDRESSES[chainId];
 
   if (!address || address === "0x0000000000000000000000000000000000000000") {
-    throw new Error("CreditShaftCore contract not deployed");
+    throw new Error("CreditShaftCore contract not deployed on this network");
   }
 
   return new ethers.Contract(address, CREDITSHAFT_CORE_ABI, signer);
 };
 
 // Get USDC contract instance
-export const getUSDCContract = () => {
+export const getUSDCContract = async () => {
   if (typeof window === "undefined" || !window.ethereum) {
     throw new Error("Web3 provider not available");
   }
 
   const provider = new ethers.providers.Web3Provider(window.ethereum);
   const signer = provider.getSigner();
-  const address = USDC_ADDRESSES[sepolia.id]; // Use Sepolia by default
+  const network = await provider.getNetwork();
+  const chainId = network.chainId;
+  
+  const address = USDC_ADDRESSES[chainId];
 
   if (!address || address === "0x0000000000000000000000000000000000000000") {
-    throw new Error("USDC contract not deployed");
+    throw new Error("USDC contract not deployed on this network");
   }
 
   return new ethers.Contract(address, USDC_ABI, signer);
 };
 
 // Get LP Token contract instance
-export const getLPTokenContract = () => {
+export const getLPTokenContract = async () => {
   if (typeof window === "undefined" || !window.ethereum) {
     throw new Error("Web3 provider not available");
   }
 
   const provider = new ethers.providers.Web3Provider(window.ethereum);
   const signer = provider.getSigner();
-  const address = LP_TOKEN_ADDRESSES[sepolia.id]; // Use Sepolia by default
+  const network = await provider.getNetwork();
+  const chainId = network.chainId;
+  
+  const address = LP_TOKEN_ADDRESSES[chainId];
 
   if (!address || address === "0x0000000000000000000000000000000000000000") {
-    throw new Error("LP Token contract not deployed");
+    throw new Error("LP Token contract not deployed on this network");
   }
 
   return new ethers.Contract(address, LP_TOKEN_ABI, signer);
@@ -194,7 +219,7 @@ export const getPoolStats = async () => {
       timestamp: new Date().toISOString(),
     });
 
-    const contract = getContract();
+    const contract = await getContract();
     const [totalLiq, totalBorr, available, utilization] =
       await contract.getPoolStats();
 
@@ -239,7 +264,7 @@ export const openLeveragePosition = async (params: {
   stripePaymentMethodId: string;
 }) => {
   try {
-    const contract = getContract();
+    const contract = await getContract();
     const signer = contract.signer; // Get the signer from the contract instance
 
     // Convert collateralLINK to BigNumber (18 decimals)
@@ -267,7 +292,14 @@ export const openLeveragePosition = async (params: {
     });
 
     // Check and approve LINK tokens to the contract if necessary
-    const linkTokenAddress = "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5"; // From Integration.md
+    const network = await contract.provider.getNetwork();
+    const chainId = network.chainId;
+    const linkTokenAddress = LINK_TOKEN_ADDRESSES[chainId];
+    
+    if (!linkTokenAddress) {
+      throw new Error("LINK token not available on this network");
+    }
+    
     const linkContract = new ethers.Contract(
       linkTokenAddress,
       [
@@ -296,7 +328,6 @@ export const openLeveragePosition = async (params: {
       );
       
       // Get dynamic gas settings for approval (unlimited amount)
-      const chainId = (await contract.provider.getNetwork()).chainId;
       const approvalGasSettings = await getGasSettings(
         contract.provider,
         chainId,
@@ -319,7 +350,6 @@ export const openLeveragePosition = async (params: {
     }
 
     // Get dynamic gas settings for position opening
-    const chainId = (await contract.provider.getNetwork()).chainId;
     const positionGasSettings = await getGasSettings(
       contract.provider,
       chainId,
@@ -410,7 +440,7 @@ export const openLeveragePosition = async (params: {
 
 export const closeLeveragePosition = async () => {
   try {
-    const contract = getContract();
+    const contract = await getContract();
     const userAddress = await contract.signer.getAddress();
 
     // Get position details before closing to retrieve Stripe payment intent ID and charge status
@@ -537,7 +567,7 @@ export const closeLeveragePosition = async () => {
 
 export const getPositionDetails = async (userAddress: string) => {
   try {
-    const contract = getContract();
+    const contract = await getContract();
     const position = await contract.positions(userAddress);
 
     // Map the array result to the Position interface
@@ -564,11 +594,46 @@ export const getPositionDetails = async (userAddress: string) => {
 
 export const getLINKPrice = async (): Promise<string> => {
   try {
-    const contract = getContract();
+    console.log("🔗 LINK PRICE QUERY INPUT:", {
+      function: "getLINKPrice",
+      timestamp: new Date().toISOString(),
+    });
+
+    const contract = await getContract();
+    const network = await contract.provider.getNetwork();
+    const contractAddress = contract.address;
+
+    console.log("🔗 LINK PRICE QUERY DETAILS:", {
+      network: {
+        chainId: network.chainId,
+        name: network.name,
+      },
+      contractAddress: contractAddress,
+      timestamp: new Date().toISOString(),
+    });
+
     const price = await contract.getLINKPrice();
-    return price.toString(); // Return as string to handle large numbers
+    const priceString = price.toString();
+
+    console.log("🔗 LINK PRICE QUERY OUTPUT:", {
+      function: "getLINKPrice",
+      priceRaw: priceString,
+      priceFormatted: `$${(parseFloat(priceString) / 1e8).toFixed(2)}`,
+      network: network.chainId,
+      contractAddress: contractAddress,
+      timestamp: new Date().toISOString(),
+    });
+
+    return priceString; // Return as string to handle large numbers
   } catch (error) {
-    console.error("Error getting LINK price:", error);
+    console.error("🔗 LINK PRICE QUERY ERROR:", {
+      function: "getLINKPrice",
+      error: error,
+      errorMessage: (error as Error).message || String(error),
+      errorCode: (error as {code?: string}).code,
+      errorData: (error as {data?: string}).data,
+      timestamp: new Date().toISOString(),
+    });
     throw error;
   }
 };
@@ -580,7 +645,7 @@ export const toStripeCents = (amount: number): number => {
 
 export const addLiquidity = async (ethAmount: string) => {
   try {
-    const contract = getContract();
+    const contract = await getContract();
     const valueWei = ethers.utils.parseEther(ethAmount);
 
     // Log blockchain transaction input data
@@ -666,7 +731,7 @@ export const addLiquidity = async (ethAmount: string) => {
 
 export const removeLiquidity = async (shares: string) => {
   try {
-    const contract = getContract();
+    const contract = await getContract();
     const sharesWei = ethers.utils.parseEther(shares);
 
     // Log blockchain transaction input data
@@ -749,7 +814,7 @@ export const removeLiquidity = async (shares: string) => {
 // New function to get user LP balance (replaces getMyLPBalance for specific user)
 export const getUserLPBalance = async (userAddress: string) => {
   try {
-    const contract = getContract();
+    const contract = await getContract();
     const [shares, value] = await contract.getUserLPBalance(userAddress);
     return {
       shares: ethers.utils.formatEther(shares),
@@ -764,7 +829,7 @@ export const getUserLPBalance = async (userAddress: string) => {
 // Function to check if user has active loan (requires address now)
 export const hasActiveLoan = async (userAddress: string): Promise<boolean> => {
   try {
-    const contract = getContract();
+    const contract = await getContract();
     return await contract.hasActiveLoan(userAddress);
   } catch (error) {
     console.error("Error checking active loan:", error);
@@ -783,8 +848,8 @@ export const hasActiveLoan = async (userAddress: string): Promise<boolean> => {
 // Add USDC liquidity to the pool
 export const addUSDCLiquidity = async (usdcAmount: string) => {
   try {
-    const coreContract = getCreditShaftCoreContract();
-    const usdcContract = getUSDCContract();
+    const coreContract = await getCreditShaftCoreContract();
+    const usdcContract = await getUSDCContract();
     const signer = coreContract.signer;
 
     // Convert USDC amount to proper decimals (6 decimals for USDC)
@@ -926,7 +991,7 @@ export const addUSDCLiquidity = async (usdcAmount: string) => {
 // Remove USDC liquidity from the pool
 export const removeUSDCLiquidity = async (lpTokenAmount: string) => {
   try {
-    const coreContract = getCreditShaftCoreContract();
+    const coreContract = await getCreditShaftCoreContract();
 
     // Convert LP token amount to proper decimals (6 decimals like USDC)
     const lpTokenAmountWei = ethers.utils.parseUnits(lpTokenAmount, 6);
@@ -1010,7 +1075,7 @@ export const removeUSDCLiquidity = async (lpTokenAmount: string) => {
 // Get user's LP token balance 
 export const getUserUSDCLPBalance = async (userAddress: string) => {
   try {
-    const lpTokenContract = getLPTokenContract();
+    const lpTokenContract = await getLPTokenContract();
     const lpBalance = await lpTokenContract.balanceOf(userAddress);
     
     return {
@@ -1026,7 +1091,7 @@ export const getUserUSDCLPBalance = async (userAddress: string) => {
 // Get user's USDC balance
 export const getUserUSDCBalance = async (userAddress: string) => {
   try {
-    const usdcContract = getUSDCContract();
+    const usdcContract = await getUSDCContract();
     const usdcBalance = await usdcContract.balanceOf(userAddress);
     
     return {
@@ -1047,7 +1112,7 @@ export const getUSDCPoolStats = async () => {
       timestamp: new Date().toISOString(),
     });
 
-    const coreContract = getCreditShaftCoreContract();
+    const coreContract = await getCreditShaftCoreContract();
     const totalLiquidity = await coreContract.getTotalUSDCLiquidity();
     const availableLiquidity = await coreContract.getAvailableUSDCLiquidity();
     const totalFees = await coreContract.totalFlashLoanFees();
@@ -1120,26 +1185,36 @@ export const getErrorMessage = (error: unknown): string => {
 // =============================================
 
 // Get faucet contract instance
-export const getFaucetContract = () => {
+export const getFaucetContract = async () => {
   if (typeof window === "undefined" || !window.ethereum) {
     throw new Error("Web3 provider not available");
   }
 
   const provider = new ethers.providers.Web3Provider(window.ethereum);
   const signer = provider.getSigner();
+  const network = await provider.getNetwork();
+  const chainId = network.chainId;
+  
+  const address = FAUCET_ADDRESSES[chainId];
 
-  return new ethers.Contract(FAUCET_ADDRESS, FAUCET_ABI, signer);
+  if (!address) {
+    throw new Error("Faucet contract not available on this network");
+  }
+
+  return new ethers.Contract(address, FAUCET_ABI, signer);
 };
 
 // Mint USDC tokens (1000 tokens with 6 decimals)
 export const mintUSDC = async (toAddress: string) => {
   try {
-    const faucetContract = getFaucetContract();
+    const faucetContract = await getFaucetContract();
+    const chainId = (await faucetContract.provider.getNetwork()).chainId;
+    const usdcAddress = USDC_ADDRESSES[chainId];
     const amount = ethers.utils.parseUnits("1000", 6); // 1000 USDC with 6 decimals
 
     console.log("🔗 FAUCET MINT INPUT:", {
       function: "mintUSDC",
-      token: USDC_ADDRESSES[sepolia.id],
+      token: usdcAddress,
       to: toAddress,
       amount: "1000",
       amountWei: amount.toString(),
@@ -1147,13 +1222,12 @@ export const mintUSDC = async (toAddress: string) => {
     });
 
     // Get dynamic gas settings for mintUSDC
-    const chainId = (await faucetContract.provider.getNetwork()).chainId;
     const gasSettings = await getGasSettings(
       faucetContract.provider,
       chainId,
       'mint',
       faucetContract,
-      [USDC_ADDRESSES[sepolia.id], toAddress, amount]
+      [usdcAddress, toAddress, amount]
     );
     
     console.log('Using gas settings for mintUSDC:', formatGasSettings(gasSettings));
@@ -1167,7 +1241,7 @@ export const mintUSDC = async (toAddress: string) => {
         const gasSettingsToUse = attempts === 0 ? gasSettings : await retryWithIncreasedGas(gasSettings, attempts);
         
         tx = await faucetContract.mint(
-          USDC_ADDRESSES[sepolia.id],
+          usdcAddress,
           toAddress,
           amount,
           gasSettingsToUse
@@ -1206,12 +1280,19 @@ export const mintUSDC = async (toAddress: string) => {
 // Mint LINK tokens (1000 tokens with 18 decimals)
 export const mintLINK = async (toAddress: string) => {
   try {
-    const faucetContract = getFaucetContract();
+    const faucetContract = await getFaucetContract();
     const amount = ethers.utils.parseEther("1000"); // 1000 LINK with 18 decimals
+
+    const chainId = (await faucetContract.provider.getNetwork()).chainId;
+    const linkTokenAddress = LINK_TOKEN_ADDRESSES[chainId];
+
+    if (!linkTokenAddress) {
+      throw new Error("LINK token not available on this network");
+    }
 
     console.log("🔗 FAUCET MINT INPUT:", {
       function: "mintLINK",
-      token: LINK_TOKEN_ADDRESS,
+      token: linkTokenAddress,
       to: toAddress,
       amount: "1000",
       amountWei: amount.toString(),
@@ -1219,13 +1300,12 @@ export const mintLINK = async (toAddress: string) => {
     });
 
     // Get dynamic gas settings for mintLINK
-    const chainId = (await faucetContract.provider.getNetwork()).chainId;
     const gasSettings = await getGasSettings(
       faucetContract.provider,
       chainId,
       'mint',
       faucetContract,
-      [LINK_TOKEN_ADDRESS, toAddress, amount]
+      [linkTokenAddress, toAddress, amount]
     );
     
     console.log('Using gas settings for mintLINK:', formatGasSettings(gasSettings));
@@ -1239,7 +1319,7 @@ export const mintLINK = async (toAddress: string) => {
         const gasSettingsToUse = attempts === 0 ? gasSettings : await retryWithIncreasedGas(gasSettings, attempts);
         
         tx = await faucetContract.mint(
-          LINK_TOKEN_ADDRESS,
+          linkTokenAddress,
           toAddress,
           amount,
           gasSettingsToUse
@@ -1282,7 +1362,7 @@ export const mintLINK = async (toAddress: string) => {
 // Borrow additional USDC to make position unsafe (testing only)
 export const borrowMoreUSDC = async (additionalAmount: string) => {
   try {
-    const contract = getContract();
+    const contract = await getContract();
     
     // Convert additional amount to proper decimals (6 decimals for USDC)
     const additionalAmountWei = ethers.utils.parseUnits(additionalAmount, 6);
